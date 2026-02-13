@@ -1,0 +1,4 @@
+apscheduler==3.11.0
+sqlalchemy==2.0.38
+pydantic-settings==2.7.1
+python-dateutil==2.9.0.post0
