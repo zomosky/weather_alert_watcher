@@ -1,0 +1,86 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: weather
+      POSTGRES_USER: weather
+      POSTGRES_PASSWORD: weather
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://weather:weather@db:5432/weather
+      REFRESH_INTERVAL_MINUTES: ${REFRESH_INTERVAL_MINUTES:-30}
+      WARNING_PROVIDER: ${WARNING_PROVIDER:-mock}
+      FORECAST_PROVIDER: ${FORECAST_PROVIDER:-mock}
+      FALLBACK_TO_MOCK_ON_FAILURE: ${FALLBACK_TO_MOCK_ON_FAILURE:-true}
+      NMC_SOURCE_URLS: ${NMC_SOURCE_URLS:-https://www.nmc.cn/publish/weatherperday/index.htm,https://www.nmc.cn/publish/country/warning/dust.html,https://www.nmc.cn/publish/weather-bulletin/index.htm}
+      QWEATHER_API_BASE: ${QWEATHER_API_BASE:-https://devapi.qweather.com/v7}
+      QWEATHER_API_KEY: ${QWEATHER_API_KEY:-}
+      OPENMETEO_API_BASE: ${OPENMETEO_API_BASE:-https://api.open-meteo.com/v1}
+      AI_PROVIDER: ${AI_PROVIDER:-none}
+      AI_ENABLED_FOR_NMC: ${AI_ENABLED_FOR_NMC:-true}
+      OPENAI_API_BASE: ${OPENAI_API_BASE:-https://api.openai.com/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      AI_CONFIDENCE_THRESHOLD: ${AI_CONFIDENCE_THRESHOLD:-0.65}
+      DEFAULT_LAT: ${DEFAULT_LAT:-39.9042}
+      DEFAULT_LON: ${DEFAULT_LON:-116.4074}
+      DEFAULT_PROVINCE: ${DEFAULT_PROVINCE:-北京}
+      DEFAULT_LABEL: ${DEFAULT_LABEL:-北京}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://weather:weather@db:5432/weather
+      REFRESH_INTERVAL_MINUTES: ${REFRESH_INTERVAL_MINUTES:-30}
+      WARNING_PROVIDER: ${WARNING_PROVIDER:-mock}
+      FORECAST_PROVIDER: ${FORECAST_PROVIDER:-mock}
+      FALLBACK_TO_MOCK_ON_FAILURE: ${FALLBACK_TO_MOCK_ON_FAILURE:-true}
+      NMC_SOURCE_URLS: ${NMC_SOURCE_URLS:-https://www.nmc.cn/publish/weatherperday/index.htm,https://www.nmc.cn/publish/country/warning/dust.html,https://www.nmc.cn/publish/weather-bulletin/index.htm}
+      QWEATHER_API_BASE: ${QWEATHER_API_BASE:-https://devapi.qweather.com/v7}
+      QWEATHER_API_KEY: ${QWEATHER_API_KEY:-}
+      OPENMETEO_API_BASE: ${OPENMETEO_API_BASE:-https://api.open-meteo.com/v1}
+      AI_PROVIDER: ${AI_PROVIDER:-none}
+      AI_ENABLED_FOR_NMC: ${AI_ENABLED_FOR_NMC:-true}
+      OPENAI_API_BASE: ${OPENAI_API_BASE:-https://api.openai.com/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      AI_CONFIDENCE_THRESHOLD: ${AI_CONFIDENCE_THRESHOLD:-0.65}
+      DEFAULT_LAT: ${DEFAULT_LAT:-39.9042}
+      DEFAULT_LON: ${DEFAULT_LON:-116.4074}
+      DEFAULT_PROVINCE: ${DEFAULT_PROVINCE:-北京}
+      DEFAULT_LABEL: ${DEFAULT_LABEL:-北京}
+    depends_on:
+      - db
+      - redis
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  pg_data:
