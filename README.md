@@ -57,6 +57,43 @@ curl -sS http://localhost:8000/api/v1/health
 2. `http://localhost:5173` 返回 `200 OK`
 3. health 返回 `{"status":"ok"}`
 
+### 2.4 推荐开发方式（更快）
+原则：后端与依赖容器常驻，前端用 Vite 热更新，避免重复 `npm install` 与镜像重建。
+
+1. 启动后端与依赖（常驻）：
+```bash
+docker compose up -d db redis api worker
+```
+
+2. 启动前端开发服务（热更新）：
+```bash
+cd frontend
+npm install   # 仅首次或 package.json 变更时
+npm run dev
+```
+
+3. 访问：
+- Web: `http://localhost:5173`
+- Health: `http://localhost:8000/api/v1/health`
+
+也可使用一键脚本：
+```bash
+./dev.sh
+```
+
+停止开发环境（关闭 Vite + 后端容器）：
+```bash
+./dev-stop.sh
+```
+说明：
+1. `dev.sh` 会先停止 `web` 容器，避免 5173 端口冲突。
+2. `dev-stop.sh` 会执行 `docker compose down`，彻底停止并移除服务。
+3. 若 `8000/5173` 仍被其他项目容器占用，`dev-stop.sh` 会打印占用来源。
+4. 若你要强制释放占用端口，可执行：
+```bash
+DEV_STOP_FORCE_PORTS=1 ./dev-stop.sh
+```
+
 ### 2.4 首次使用流程
 1. 打开 `http://localhost:5173`
 2. 在“位置输入”中使用任一方式：
@@ -66,6 +103,10 @@ curl -sS http://localhost:8000/api/v1/health
 3. 观察地图边界高亮与右侧预警列表是否联动
 4. 需要手工刷新时点击“更新看板”
 5. 通过“一键还原视图”重置地图视角
+
+### 2.5 什么时候需要重新构建
+1. `npm install`：仅当 `package.json` 或 `package-lock.json` 变更时执行。
+2. `docker compose up --build`：仅当后端依赖或容器镜像需要更新时执行。
 
 ---
 
@@ -222,6 +263,9 @@ docker compose logs worker --tail=200
 docker compose up --build -d web
 docker compose up --build -d api
 docker compose up --build -d worker
+
+# 仅前端开发（避免重建）
+cd frontend && npm run dev
 
 # 全量重启
 docker compose down

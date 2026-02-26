@@ -37,6 +37,11 @@
    - 日志无持续异常（`web/api/worker`）
 3. 验证失败时必须记录回滚方案并更新 `SESSION_STATE.md`。
 
+## 开发效率规则
+1. 前端开发默认使用 `npm run dev` 热更新，避免频繁 `docker compose up --build`。
+2. 仅在依赖变更时执行 `npm install` 或镜像重建。
+3. 推荐使用 `dev.sh` / `dev-stop.sh` 统一启动与停止开发环境，避免端口冲突与残留容器。
+
 ## 演示与生产分离规则
 1. 演示数据必须显式标识（例如 source 为 `MockScenario`）。
 2. 生产环境禁止无感知回退到 mock；是否开启需策略化配置并可追踪。
