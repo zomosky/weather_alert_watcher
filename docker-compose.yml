@@ -1,88 +1,77 @@
+name: weather_alert_watcher
+
+x-runtime: &runtime
+  image: weather-alert-watcher-api:local
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://weather:${POSTGRES_PASSWORD:-weather}@db:5432/weather
+    WARNING_PROVIDER: ${WARNING_PROVIDER:-cma}
+    FORECAST_PROVIDER: ${FORECAST_PROVIDER:-openmeteo}
+    FALLBACK_TO_MOCK_ON_FAILURE: ${FALLBACK_TO_MOCK_ON_FAILURE:-false}
+  restart: unless-stopped
+  init: true
+
 services:
   db:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: weather
       POSTGRES_USER: weather
-      POSTGRES_PASSWORD: weather
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-weather}
     volumes:
       - pg_data:/var/lib/postgresql/data
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U weather -d weather"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
 
   api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    environment:
-      DATABASE_URL: postgresql+psycopg://weather:weather@db:5432/weather
-      REFRESH_INTERVAL_MINUTES: ${REFRESH_INTERVAL_MINUTES:-30}
-      WARNING_PROVIDER: ${WARNING_PROVIDER:-mock}
-      FORECAST_PROVIDER: ${FORECAST_PROVIDER:-mock}
-      FALLBACK_TO_MOCK_ON_FAILURE: ${FALLBACK_TO_MOCK_ON_FAILURE:-true}
-      NMC_SOURCE_URLS: ${NMC_SOURCE_URLS:-https://www.nmc.cn/publish/weatherperday/index.htm,https://www.nmc.cn/publish/country/warning/dust.html,https://www.nmc.cn/publish/weather-bulletin/index.htm}
-      QWEATHER_API_BASE: ${QWEATHER_API_BASE:-https://devapi.qweather.com/v7}
-      QWEATHER_API_KEY: ${QWEATHER_API_KEY:-}
-      OPENMETEO_API_BASE: ${OPENMETEO_API_BASE:-https://api.open-meteo.com/v1}
-      AI_PROVIDER: ${AI_PROVIDER:-none}
-      AI_ENABLED_FOR_NMC: ${AI_ENABLED_FOR_NMC:-true}
-      OPENAI_API_BASE: ${OPENAI_API_BASE:-https://api.openai.com/v1}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
-      AI_CONFIDENCE_THRESHOLD: ${AI_CONFIDENCE_THRESHOLD:-0.65}
-      DEFAULT_LAT: ${DEFAULT_LAT:-39.9042}
-      DEFAULT_LON: ${DEFAULT_LON:-116.4074}
-      DEFAULT_PROVINCE: ${DEFAULT_PROVINCE:-北京}
-      DEFAULT_LABEL: ${DEFAULT_LABEL:-北京}
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
-      - redis
-
-  worker:
+    <<: *runtime
     build:
       context: .
-      dockerfile: worker/Dockerfile
-    environment:
-      DATABASE_URL: postgresql+psycopg://weather:weather@db:5432/weather
-      REFRESH_INTERVAL_MINUTES: ${REFRESH_INTERVAL_MINUTES:-30}
-      WARNING_PROVIDER: ${WARNING_PROVIDER:-mock}
-      FORECAST_PROVIDER: ${FORECAST_PROVIDER:-mock}
-      FALLBACK_TO_MOCK_ON_FAILURE: ${FALLBACK_TO_MOCK_ON_FAILURE:-true}
-      NMC_SOURCE_URLS: ${NMC_SOURCE_URLS:-https://www.nmc.cn/publish/weatherperday/index.htm,https://www.nmc.cn/publish/country/warning/dust.html,https://www.nmc.cn/publish/weather-bulletin/index.htm}
-      QWEATHER_API_BASE: ${QWEATHER_API_BASE:-https://devapi.qweather.com/v7}
-      QWEATHER_API_KEY: ${QWEATHER_API_KEY:-}
-      OPENMETEO_API_BASE: ${OPENMETEO_API_BASE:-https://api.open-meteo.com/v1}
-      AI_PROVIDER: ${AI_PROVIDER:-none}
-      AI_ENABLED_FOR_NMC: ${AI_ENABLED_FOR_NMC:-true}
-      OPENAI_API_BASE: ${OPENAI_API_BASE:-https://api.openai.com/v1}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
-      AI_CONFIDENCE_THRESHOLD: ${AI_CONFIDENCE_THRESHOLD:-0.65}
-      DEFAULT_LAT: ${DEFAULT_LAT:-39.9042}
-      DEFAULT_LON: ${DEFAULT_LON:-116.4074}
-      DEFAULT_PROVINCE: ${DEFAULT_PROVINCE:-北京}
-      DEFAULT_LABEL: ${DEFAULT_LABEL:-北京}
+      dockerfile: backend/Dockerfile
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/ready', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  worker:
+    <<: *runtime
+    command: ["python", "-m", "worker.app.worker"]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,time; from pathlib import Path; p=Path('/tmp/weather-worker-health'); assert p.exists() and time.time()-p.stat().st_mtime < max(120,int(os.getenv('REFRESH_INTERVAL_MINUTES','30'))*120)"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
 
   web:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    environment:
-      VITE_API_PROXY_TARGET: ${VITE_API_PROXY_TARGET:-http://api:8000}
     ports:
-      - "5173:5173"
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-5173}:8080"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
 
 volumes:
   pg_data:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.core.config import Settings
 from app.providers.base import ForecastProvider, WarningProvider
+from app.providers.cma_provider import CmaWarningProvider
 from app.providers.mock_provider import MockWeatherProvider
 from app.providers.nmc_provider import NmcBulletinWarningProvider
 from app.providers.openmeteo_provider import OpenMeteoForecastProvider
@@ -11,6 +12,8 @@ from app.services.ai_extractor import AiExtractor
 
 def build_warning_provider(settings: Settings, ai_extractor: AiExtractor) -> WarningProvider:
     provider = settings.warning_provider.lower()
+    if provider == "cma":
+        return CmaWarningProvider(settings=settings, ai_extractor=ai_extractor)
     if provider == "nmc":
         return NmcBulletinWarningProvider(settings=settings, ai_extractor=ai_extractor)
     if provider == "qweather":

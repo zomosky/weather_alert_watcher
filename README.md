@@ -1,367 +1,148 @@
 # Weather Alert Watcher
 
-全国极端天气展示看板（V1）。
+全国极端天气看板：官方预警、CMA 公开消息和位置温湿度预报。
 
-本仓库已具备从开发到单机上线的完整链路：`web + api + worker + db + redis`。
+## 数据与展示边界
 
-## 1. 项目概览
+- CMA 消息复用相邻 `cma_publish` 项目的公开来源、并发抓取和失败隔离思路，采集实现完整保存在本仓库；运行与构建不依赖相邻目录，不读取其私密设置，也不发送邮件。
+- 公告保留原文 URL、发布时间、抓取时间、省份和天气主题。正文来自中央气象台页面的 `.writing`，排除导航、页脚和脚本。
+- 天气公报、官方预警发布、中期展望分别展示；`mid-range` 只作为展望。主题标签表示原文涉及内容，可能包含回顾或“无影响”等表述，不能作为省级实时风险判断。
+- 地图颜色仅采用有明确官方标题颜色、明确发布时间的预警；不把大暴雨等强度换算为官方颜色。CMA 预警地图使用近 24 小时发布窗口，该窗口不是官方有效期的声明。解除、取消的预警不进入地图。
+- 公告默认保留近 72 小时，每个来源展示最新版本。缺少发布时间时明确标注，不能进入正式预警。来源失败保留窗口内已有数据，不生成模拟公告。
+- 默认使用真实 CMA + Open-Meteo，关闭模拟回退。预报严格匹配请求坐标；缺失时显示空态。切换位置可按需采集并缓存该位置预报。
+- `CMA_BULLETINS_ENABLED=false` 仅关闭公告入库和展示；`WARNING_PROVIDER=cma` 仍独立采集正式预警。公告开启时复用该轮采集结果，避免重复请求；来源失败保留已有预警，不回退到模拟 CMA 预警。
 
-### 1.1 当前阶段
-- 全栈可运行
-- 地图联动与边界高亮可用
-- 真实数据源联调待完成
+## 项目结构
 
-### 1.2 核心能力
-1. 全国省级风险地图（离线 GeoJSON）
-2. 预警列表与未来 7 天温湿度曲线
-3. 多入口位置联动：定位 / 手输经纬度 / 地图点击 / 预警点击
-4. 当前省份仅边界高亮（不覆盖风险填充色）
-5. 南海诸岛独立 inset 小框展示
-6. worker 每 30 分钟刷新数据
-7. provider 配置化：`mock / nmc / qweather / openmeteo`
-
-### 1.3 服务与端口
-- `web`：前端看板，`5173`
-- `api`：后端接口，`8000`
-- `worker`：定时刷新任务
-- `db`：PostgreSQL，`5432`
-- `redis`：Redis，`6379`
-
----
-
-## 2. 快速开始（本地）
-
-### 2.1 前置条件
-1. Docker Desktop（Mac/Windows）或 Docker Engine（Linux）
-2. Docker Compose plugin（`docker compose` 命令可用）
-3. 可访问 Docker Hub（首次构建需要拉基础镜像）
-
-### 2.2 启动步骤
-1. 复制环境变量模板：
-```bash
-cp .env.example .env
-```
-2. 启动全栈：
-```bash
-docker compose up --build -d
+```text
+backend/app/
+  api/                 HTTP 接口与响应组装
+  core/                环境配置与数据库连接
+  models/              预警、预报、公告和刷新状态
+  providers/           CMA 正文解析与第三方数据适配
+  services/            公告刷新、预报缓存、独立链路编排
+  storage/             持久化与保留窗口
+backend/tests/         解析、失败隔离、持久化和 API 契约测试
+frontend/src/          React 组件、类型、API client、共享位置与时间工具
+worker/app/worker.py   周期刷新与 --once 单次采集
+scripts/acceptance.py  可复现的真实 API/数据验收
+pyproject.toml         Python 依赖真源
+uv.lock                锁定依赖
+frontend/nginx.conf    静态资源与同源 API 代理
 ```
 
-### 2.3 运行验证
+## 本机开发
+
+前置条件：`uv`、Node.js 22；Docker 模式另需 Docker Desktop。
+
 ```bash
-docker compose ps
-curl -I http://localhost:5173
-curl -sS http://localhost:8000/api/v1/health
-```
-期望结果：
-1. `web/api/worker/db/redis` 全部 `Up`
-2. `http://localhost:5173` 返回 `200 OK`
-3. health 返回 `{"status":"ok"}`
-
-### 2.4 推荐开发方式（更快）
-原则：后端与依赖容器常驻，前端用 Vite 热更新，避免重复 `npm install` 与镜像重建。
-
-1. 启动后端与依赖（常驻）：
-```bash
-docker compose up -d db redis api worker
-```
-
-2. 启动前端开发服务（热更新）：
-```bash
-cd frontend
-npm install   # 仅首次或 package.json 变更时
-npm run dev
-```
-
-3. 访问：
-- Web: `http://localhost:5173`
-- Health: `http://localhost:8000/api/v1/health`
-
-也可使用一键脚本：
-```bash
+cp .env.example .env   # 已有配置不要覆盖
 ./dev.sh
 ```
 
-停止开发环境（关闭 Vite + 后端容器）：
+`dev.sh` 默认运行本机 API + worker + Vite，无需 Docker。Python 使用项目 `.venv`；SQLite 默认路径为仓库内 `weather.db`。日志保存在 `.run/api.log`、`.run/worker.log`，终止脚本会清理本次启动的进程。
+
 ```bash
 ./dev-stop.sh
+DEV_BACKEND=docker ./dev.sh       # PostgreSQL/API/worker 容器 + 本机 Vite
+DEV_BACKEND=docker ./dev-stop.sh
 ```
-说明：
-1. `dev.sh` 会先停止 `web` 容器，避免 5173 端口冲突。
-2. `dev-stop.sh` 会执行 `docker compose down`，彻底停止并移除服务。
-3. 若 `8000/5173` 仍被其他项目容器占用，`dev-stop.sh` 会打印占用来源。
-4. 若你要强制释放占用端口，可执行：
+
+切换两种模式前先停止原环境。前端依赖首次由脚本 `npm ci` 安装；锁文件变更后重新执行 `cd frontend && npm ci`。第三方访问需要代理时，在运行脚本的 shell 设置 `HTTP_PROXY`、`HTTPS_PROXY`，并将本地地址加入 `NO_PROXY`。
+
+单独运行：
+
 ```bash
-DEV_STOP_FORCE_PORTS=1 ./dev-stop.sh
-```
-
-### 2.4 首次使用流程
-1. 打开 `http://localhost:5173`
-2. 在“位置输入”中使用任一方式：
-- 浏览器定位
-- 手动输入经纬度
-- 地图点击省份
-3. 观察地图边界高亮与右侧预警列表是否联动
-4. 需要手工刷新时点击“更新看板”
-5. 通过“一键还原视图”重置地图视角
-
-### 2.5 什么时候需要重新构建
-1. `npm install`：仅当 `package.json` 或 `package-lock.json` 变更时执行。
-2. `docker compose up --build`：仅当后端依赖或容器镜像需要更新时执行。
-
----
-
-## 3. 配置参考（`.env`）
-
-### 3.1 核心运行配置
-- `REFRESH_INTERVAL_MINUTES`：刷新周期（默认 `30`）
-- `WARNING_PROVIDER`：`mock | nmc | qweather`
-- `FORECAST_PROVIDER`：`mock | openmeteo | qweather`
-- `FALLBACK_TO_MOCK_ON_FAILURE`：失败时是否回退 mock
-
-### 3.2 数据源配置
-- NMC：`NMC_SOURCE_URLS`（逗号分隔）
-- QWeather：`QWEATHER_API_BASE`、`QWEATHER_API_KEY`
-- Open-Meteo：`OPENMETEO_API_BASE`
-
-### 3.3 AI 配置
-- `AI_PROVIDER`：`none | openai`
-- `AI_ENABLED_FOR_NMC`：是否对 NMC 公告启用 AI 辅助解读
-- `OPENAI_API_BASE`
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-- `AI_CONFIDENCE_THRESHOLD`
-
-### 3.4 默认定位配置
-- `DEFAULT_LAT`
-- `DEFAULT_LON`
-- `DEFAULT_PROVINCE`
-- `DEFAULT_LABEL`
-
-### 3.5 开发/生产建议值
-| 配置项 | 开发建议 | 生产建议 |
-| --- | --- | --- |
-| `WARNING_PROVIDER` | `mock` 或 `nmc` | `nmc`/`qweather` |
-| `FORECAST_PROVIDER` | `mock` 或 `openmeteo` | `openmeteo`/`qweather` |
-| `FALLBACK_TO_MOCK_ON_FAILURE` | `true` | `false` |
-| `AI_PROVIDER` | `none` 或 `openai` | `openai`（可选） |
-
-安全要求：
-1. 不提交任何真实 token 到仓库
-2. 生产必须通过环境变量或密钥系统注入凭证
-
----
-
-## 4. 单机生产部署（Nginx + Let's Encrypt）
-
-目标拓扑：
-- 公网流量 -> Nginx(80/443) -> `web:5173` 与 `api:8000`
-
-### 4.1 服务器准备（Ubuntu 22.04）
-```bash
-sudo timedatectl set-timezone Asia/Shanghai
-sudo apt update
-sudo apt install -y ca-certificates curl gnupg lsb-release
-```
-
-### 4.2 安装 Docker 与 Compose
-```bash
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo $VERSION_CODENAME) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo usermod -aG docker $USER
-```
-重新登录后继续。
-
-### 4.3 部署应用
-```bash
-git clone <your-repo-url> weather_alert_watcher
-cd weather_alert_watcher
-cp .env.example .env
-# 编辑 .env，填入生产配置与密钥
-
-docker compose up --build -d
-```
-
-### 4.4 安装并配置 Nginx
-```bash
-sudo apt install -y nginx
-sudo rm -f /etc/nginx/sites-enabled/default
-```
-
-创建 `/etc/nginx/sites-available/weather-alert`：
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    client_max_body_size 20m;
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:8000/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:5173/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-启用配置：
-```bash
-sudo ln -s /etc/nginx/sites-available/weather-alert /etc/nginx/sites-enabled/weather-alert
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-### 4.5 签发 HTTPS 证书（Let's Encrypt）
-```bash
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d your-domain.com
-```
-
-续期检查：
-```bash
-sudo certbot renew --dry-run
-```
-
-### 4.6 生产验收
-```bash
-docker compose ps
-curl -sS http://127.0.0.1:8000/api/v1/health
-curl -I https://your-domain.com
-```
-
----
-
-## 5. 运维手册
-
-### 5.1 常用命令
-```bash
-# 查看状态
-docker compose ps
-
-# 查看日志
-docker compose logs api --tail=200
-docker compose logs web --tail=200
-docker compose logs worker --tail=200
-
-# 单服务重建
-docker compose up --build -d web
-docker compose up --build -d api
-docker compose up --build -d worker
-
-# 仅前端开发（避免重建）
+uv sync --frozen
+PYTHONPATH=backend uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+PYTHONPATH=backend uv run python -m worker.app.worker --once
 cd frontend && npm run dev
+```
 
-# 全量重启
-docker compose down
+API 启动只初始化数据库结构，不抓取外网；定时刷新在 worker 中。首次启动应运行 worker，以获得公告和全国预警。前端读取请求会按需获取所选坐标的预报。
+
+## Docker 部署
+
+```bash
+cp .env.example .env   # 仅首次
+# 生产须修改 POSTGRES_PASSWORD；已有数据库须保持其既有凭证
+# WARNING_PROVIDER=cma, FORECAST_PROVIDER=openmeteo
+# FALLBACK_TO_MOCK_ON_FAILURE=false
 docker compose up --build -d
+docker compose ps
+curl -fsS http://127.0.0.1:8000/api/v1/ready
 ```
 
-### 5.2 升级流程
-1. `git pull`
-2. `docker compose up --build -d`
-3. 执行健康检查与页面检查
+看板：[http://localhost:5173](http://localhost:5173)。web 使用 Nginx 托管编译后的静态文件，保留 `/api/v1` 路径转发 API。API 与 worker 共用锁定依赖镜像，以非 root 用户运行；数据库、API、web 和 worker 分别有健康检查。
 
-### 5.3 回滚策略
-1. 使用上一版本代码（tag/commit）
-2. 在该版本目录执行：`docker compose up --build -d`
-3. 验证 `health` 与核心页面功能
+Compose 项目名保持 `weather_alert_watcher`，沿用 `weather_alert_watcher_pg_data` 卷。数据库只在容器网络开放；移除了当前未使用的 Redis。API 和 web 默认仅绑定本机。**不要执行 `docker compose down -v`，该命令会删除数据卷。**
 
-### 5.4 PostgreSQL 数据备份与恢复
-备份：
 ```bash
-docker exec -t weather_alert_watcher-db-1 pg_dump -U weather weather > weather_backup.sql
+docker compose logs --tail 100 worker api
+docker compose exec worker python -m worker.app.worker --once
+docker compose build api web       # 更新依赖或代码
+docker compose up -d --force-recreate api worker web
+docker compose down                # 保留数据库卷
 ```
-恢复：
+
+公网部署时，在服务器 Nginx 上配置域名和 TLS，然后将整个站点反代到 `http://127.0.0.1:5173`；容器 web 已负责 `/api/` 转发，不需要剥掉 `/api` 前缀。仅开放 80/443。`deploy/nginx-site.conf` 提供 HTTP 入口示例，再用站点实际域名配置证书。
+
+升级前保存既有镜像标记与数据库备份。回滚使用上一版本代码/镜像重新启动 API、worker、web，并复验健康检查及页面。新增 `bulletin_records` 表不重写既有表结构，回滚时可以保留它。
+
 ```bash
-cat weather_backup.sql | docker exec -i weather_alert_watcher-db-1 psql -U weather -d weather
+docker compose exec -T db pg_dump -U weather weather > weather-backup.sql
+# 恢复只在明确选择要覆盖的数据库时执行
 ```
 
----
+## 配置
 
-## 6. 故障排查
+`.env.example` 是公开模板；`.env` 不提交。密钥、代理凭证、生产数据库密码通过环境变量注入，不写入源码或日志。
 
-### 6.1 Docker Hub EOF / 拉镜像失败
-现象：`failed to fetch oauth token` 或 `Head ... EOF`
+| 配置项 | 默认值 / 含义 |
+| --- | --- |
+| `WARNING_PROVIDER` | `cma`；另支持 `qweather`、`nmc`、`mock` |
+| `FORECAST_PROVIDER` | `openmeteo`；另支持 `qweather`、`mock` |
+| `CMA_BULLETINS_ENABLED` | `true`，独立公告链路开关 |
+| `CMA_SOURCE_URLS` | 与 cma_publish 一致的 5 个中央气象台公开来源 |
+| `BULLETIN_RETENTION_HOURS` | `72`，公告保留窗口 |
+| `REFRESH_INTERVAL_MINUTES` | `30`，worker 刷新与预报缓存间隔 |
+| `FALLBACK_TO_MOCK_ON_FAILURE` | `false`；开发演示可开，UI 显示演示标识 |
+| `HTTP_TIMEOUT_SECONDS` | `20`，每次外部请求的超时 |
+| `POSTGRES_PASSWORD` | 本机模板 `weather`，生产须更换为 URL 安全字符组成的密码 |
+| `WEB_BIND/WEB_PORT/API_PORT` | `127.0.0.1/5173/8000` |
+| `CORS_ORIGINS` | 本机 Vite 来源列表；生产同源代理无需放开全部来源 |
 
-处理：
-1. 重试构建命令
-2. 优先单服务重建减少依赖：
+公告采集不使用 LLM。既有 AI 配置仅为扩展接口保留，不能用模型生成的颜色替代官方预警颜色。CMA/NMC 来源仅允许中央气象台域名；新增网页模板须补充正文与发布时间的解析验证。图片内容不做 OCR，不能从图片猜测等级。
+
+## 验证
+
+按 `AGENTS.md` 的风险约束选择受影响测试；文档改动不运行行为测试。开发中的例子：
+
 ```bash
-docker compose up --build -d --no-deps web
+uv run pytest backend/tests/test_cma_bulletins.py -q
+uv run pytest backend/tests/test_data_pipeline.py -q
+uv run pytest backend/tests/test_ingestion_switches.py -q
+cd frontend && npm run build
+docker compose config --quiet
 ```
-3. 检查网络与 Docker Hub 访问状态
 
-### 6.2 容器命名冲突
-现象：`container name ... is already in use`
+最终验收：
 
-处理：
 ```bash
-docker compose ps -a
-docker compose down
-docker compose up --build -d
+uv run pytest --junitxml=artifacts/validation/backend-tests.xml
+uv run python scripts/acceptance.py
 ```
 
-### 6.3 地图渲染异常
-典型现象：双南海、边界遮挡、旧样式未更新
+验收脚本验证静态部署、数据库就绪、CMA 来源和时间、北京/四川真实预报，以及没有模拟数据；保存 API 样本、时间戳报告与 SHA-256。浏览器另验证省份联动、公告筛选、原文摘录、空态和移动端布局，并保存截图。容器健康表示进程或数据库可用，数据是否及时以看板来源状态为准。
 
-处理：
-1. 重建前端容器：`docker compose up --build -d --no-deps web`
-2. 浏览器强制刷新（Ctrl/Cmd + Shift + R）
-3. 检查是否命中旧缓存或旧容器
+## API
 
-### 6.4 浏览器定位失败
-原因：权限拒绝、系统定位关闭、浏览器策略限制
+- `GET /api/v1/health`：进程存活。
+- `GET /api/v1/ready`：数据库可访问。
+- `POST /api/v1/dashboard`：请求 `lat`、`lon`、可选 `province/address`，返回全国预警、公告、当前坐标预报和逐来源刷新状态。
 
-兜底：手动输入经纬度或直接点击地图省份
+响应在原字段上增加 `bulletins`、`source_statuses`、`forecast_source`、`forecast_location`；时间统一携带 UTC 时区，UI 使用北京时间。
 
----
+## 文档
 
-## 7. 安全与上线检查清单
-
-上线前请逐项确认：
-1. `.env` 不含示例弱口令和空 key
-2. `FALLBACK_TO_MOCK_ON_FAILURE=false`
-3. 仅暴露必要端口（建议公网仅 80/443）
-4. HTTPS 强制生效
-5. Nginx 配置通过 `nginx -t`
-6. `docker compose ps` 全部服务稳定
-7. `/api/v1/health` 正常
-8. 首页可访问且地图/预警/曲线正常
-9. 日志无持续报错
-10. 数据备份流程已验证
-
----
-
-## 8. API 与接口约定
-
-- 健康检查：`GET /api/v1/health`
-- 看板数据：`POST /api/v1/dashboard`
-- 请求体关键字段：`lat`、`lon`、`province`
-
-本轮文档改造未修改任何接口路径与响应结构。
-
----
-
-## 9. 文档索引
-
-- `PROJECT.md`：项目目标与范围
-- `ARCHITECTURE.md`：技术架构与约束
-- `RULES.md`：协作与质量规则
-- `SESSION_STATE.md`：当前状态与风险
-- `DECISIONS.md`：关键技术决策记录
+`PROJECT.md` 描述范围；`ARCHITECTURE.md` 描述组件边界；`RULES.md` 描述协作规则；`DECISIONS.md` 记录决策；`SESSION_STATE.md` 记录当前验证结果。实施范围与失败方式见 `docs/cma-dashboard-plan.md`。

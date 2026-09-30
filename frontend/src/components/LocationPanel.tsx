@@ -1,10 +1,12 @@
 import { FormEvent, useState } from "react";
 import { SelectedLocation } from "../types";
+import { PROVINCE_CAPITAL_COORDS } from "../lib/location";
 
 type Props = {
   value: SelectedLocation;
   onChange: (next: SelectedLocation) => void;
   onSubmit: () => void;
+  loading?: boolean;
 };
 
 const PROVINCES = [
@@ -13,7 +15,7 @@ const PROVINCES = [
   "内蒙古", "广西", "西藏", "宁夏", "新疆", "香港", "澳门", "台湾",
 ];
 
-export function LocationPanel({ value, onChange, onSubmit }: Props) {
+export function LocationPanel({ value, onChange, onSubmit, loading }: Props) {
   const [geoMessage, setGeoMessage] = useState("");
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -33,8 +35,9 @@ export function LocationPanel({ value, onChange, onSubmit }: Props) {
           ...value,
           lat: Number(pos.coords.latitude.toFixed(4)),
           lon: Number(pos.coords.longitude.toFixed(4)),
+          province: undefined,
         });
-        setGeoMessage("定位成功，已更新经纬度。");
+        setGeoMessage("定位成功，请确认省份后更新看板。");
       },
       (err) => {
         if (err.code === err.PERMISSION_DENIED) {
@@ -53,12 +56,15 @@ export function LocationPanel({ value, onChange, onSubmit }: Props) {
 
   return (
     <form className="card location" onSubmit={handleSubmit}>
-      <h3>位置输入</h3>
-      <div className="grid-2">
+      <div className="location-heading"><span className="eyebrow">YOUR FOCUS</span><h2>关注区域</h2></div>
+      <div className="location-fields">
         <label>
           纬度
           <input
             type="number"
+            min={-90}
+            max={90}
+            required
             step="0.0001"
             value={value.lat}
             onChange={(e) => onChange({ ...value, lat: Number(e.target.value) })}
@@ -68,15 +74,22 @@ export function LocationPanel({ value, onChange, onSubmit }: Props) {
           经度
           <input
             type="number"
+            min={-180}
+            max={180}
+            required
             step="0.0001"
             value={value.lon}
             onChange={(e) => onChange({ ...value, lon: Number(e.target.value) })}
           />
         </label>
-      </div>
       <label>
         省份
-        <select value={value.province ?? ""} onChange={(e) => onChange({ ...value, province: e.target.value })}>
+        <select value={value.province ?? ""} onChange={(e) => {
+          const province = e.target.value;
+          const coord = PROVINCE_CAPITAL_COORDS[province];
+          onChange({ ...value, ...coord, province: province || undefined });
+        }}>
+          <option value="">自选坐标 / 请选择</option>
           {PROVINCES.map((name) => (
             <option key={name} value={name}>
               {name}
@@ -85,19 +98,17 @@ export function LocationPanel({ value, onChange, onSubmit }: Props) {
         </select>
       </label>
       <label>
-        地址（可选）
+        位置备注
         <input
           value={value.address ?? ""}
           onChange={(e) => onChange({ ...value, address: e.target.value || undefined })}
-          placeholder="当前版本仅展示经纬度，可手动备注"
+          placeholder="可选，例如关注电站"
         />
       </label>
-      <p className="meta coord-display">
-        当前经纬度：{value.lat.toFixed(4)}, {value.lon.toFixed(4)}
-      </p>
-      <div className="row">
+      </div>
+      <div className="row location-actions">
         <button type="button" onClick={locate}>定位</button>
-        <button type="submit">更新看板</button>
+        <button type="submit" disabled={loading}>{loading ? "更新中…" : "更新看板"}</button>
       </div>
       {geoMessage && <p className="meta geo-msg">{geoMessage}</p>}
     </form>

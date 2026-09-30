@@ -1,6 +1,6 @@
-import ReactECharts from "echarts-for-react";
+import ReactECharts from "echarts-for-react/lib/core";
 import { useMemo, useRef, useState } from "react";
-import * as echarts from "echarts";
+import { echarts } from "../lib/echarts";
 import chinaGeoJson from "../assets/china.json";
 import { MapPickPoint, SelectedLocation, WarningItem } from "../types";
 
@@ -28,7 +28,7 @@ function warningScore(level: string): number {
   if (level.includes("红")) return 4;
   if (level.includes("橙")) return 3;
   if (level.includes("黄")) return 2;
-  return 1;
+  return level.includes("蓝") ? 1 : 0;
 }
 
 function normalizeProvinceName(name: string): string {
@@ -49,7 +49,6 @@ const mainChinaGeoJson = {
 if (!echarts.getMap(MAIN_MAP_NAME)) {
   echarts.registerMap(MAIN_MAP_NAME, mainChinaGeoJson as never);
 }
-echarts.registerMap(MAIN_MAP_NAME, mainChinaGeoJson as never);
 
 const southSeaGeoJson = {
   type: "FeatureCollection",
@@ -191,27 +190,15 @@ export function ChinaMapPanel({ focusProvince, warnings, selectedLocation, onMap
           },
         },
         data: mapSeriesData,
-      },
-      {
-        name: "当前位置",
-        type: "scatter",
-        coordinateSystem: "map",
-        data: [[selectedLocation.lon, selectedLocation.lat]],
-        symbol: "pin",
-        symbolSize: 28,
-        itemStyle: { color: "#ef4444" },
-        label: {
-          show: true,
-          formatter: "我",
-          color: "#fff",
-          fontWeight: "bold",
-          fontSize: 10,
+        markPoint: {
+          symbol: "pin", symbolSize: 28,
+          itemStyle: { color: "#123b39", borderColor: "#fff", borderWidth: 1 },
+          label: { show: false },
+          data: [{ name: "当前坐标", coord: [selectedLocation.lon, selectedLocation.lat] }],
+          tooltip: { formatter: () => `当前坐标：${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lon.toFixed(4)}` },
         },
-        tooltip: {
-          formatter: () => `当前位置<br/>${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lon.toFixed(4)}`,
-        },
-        zlevel: 20,
       },
+
     ],
   };
 
@@ -242,7 +229,7 @@ export function ChinaMapPanel({ focusProvince, warnings, selectedLocation, onMap
         return;
       }
       const clickedProvince = params.name ? normalizeProvinceName(params.name) : "";
-      if (clickedProvince) {
+      if (clickedProvince && !pickMode) {
         onProvinceFocus(clickedProvince);
       }
       if (!pickMode) {
@@ -266,18 +253,19 @@ export function ChinaMapPanel({ focusProvince, warnings, selectedLocation, onMap
         lat: result[1],
         province: clickedProvince || undefined,
       });
-      setMapMessage(`已回填坐标：${result[1].toFixed(4)}, ${result[0].toFixed(4)}（未自动刷新）`);
+      setMapMessage(`已切换坐标：${result[1].toFixed(4)}, ${result[0].toFixed(4)}（已自动刷新）`);
     },
   };
 
   return (
-    <section className="card">
-      <h3>全国省级预警地图</h3>
+    <section className="card map-panel">
+      <span className="eyebrow">NATIONAL OVERVIEW</span>
+      <h2>全国预警态势</h2>
       <p className="meta focus-meta">
         当前省份：{focusProvince ?? "未指定"}（已边界高亮）
       </p>
       <p className="meta">
-        当前位置图钉：{selectedLocation.lat.toFixed(4)}, {selectedLocation.lon.toFixed(4)}
+        公告与中期展望在下方单独展示；选中省份仅边界高亮。
       </p>
       <div className="map-toolbar">
         <button
@@ -306,11 +294,11 @@ export function ChinaMapPanel({ focusProvince, warnings, selectedLocation, onMap
       </div>
       {mapMessage && <p className="meta geo-msg">{mapMessage}</p>}
       <div className="china-map-wrap">
-        <ReactECharts ref={chartRef} option={option} onEvents={onEvents} style={{ height: 520 }} />
+        <ReactECharts echarts={echarts} ref={chartRef} option={option} onEvents={onEvents} style={{ height: 520 }} />
         {southSeaGeoJson.features.length > 0 && (
           <div className="south-sea-inset">
             <p className="meta inset-title">南海诸岛</p>
-            <ReactECharts option={southSeaOption} style={{ height: 110 }} />
+            <ReactECharts echarts={echarts} option={southSeaOption} style={{ height: 110 }} />
           </div>
         )}
       </div>

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -53,7 +53,7 @@ class OpenMeteoForecastProvider:
                     temperature_c=float(temps[idx]),
                     humidity_pct=float(humidity[idx]),
                     source="OpenMeteo",
-                    created_at=datetime.utcnow(),
+                    created_at=datetime.now(timezone.utc),
                 )
             )
 

@@ -7,17 +7,17 @@
 2. 可视化：ECharts（曲线与地图）
 3. 后端：Python FastAPI
 4. 任务调度：APScheduler（当前）
-5. 数据存储：PostgreSQL（主）+ Redis（缓存/扩展预留）
+5. 数据存储：PostgreSQL（持久化；当前不使用 Redis）
 6. 部署：Docker / Docker Compose
 
 ## 部署拓扑
 1. 本地开发拓扑：
-   - 浏览器 -> `web(5173)` -> `api(8000)` -> `db/redis`
+   - 浏览器 -> `web(5173)` -> `api(8000)` -> `db`
    - `worker` 独立执行周期刷新
    - 推荐脚本：`dev.sh` 启动开发环境，`dev-stop.sh` 彻底停止
 2. 单机生产拓扑：
-   - 公网 -> `Nginx(80/443)` -> `web(5173)` 与 `api(8000)`
-   - `db` 与 `redis` 仅内网容器访问
+   - 公网 -> `Nginx(80/443)` -> `web(5173)`；容器 web 将 `/api/` 原样代理到 API
+   - `db` 仅内网容器访问
 3. 明确不在本轮支持：
    - Kubernetes、多机高可用、跨地域容灾
 
@@ -25,7 +25,7 @@
 1. 统一公网入口与 TLS 终止（Let's Encrypt）。
 2. 路由转发：
    - `/` -> `web`
-   - `/api/` -> `api`
+   - `/api/` -> `web` 内置代理 -> `api`，保留完整路径
 3. 最小暴露原则：公网只开放 80/443。
 
 ## 架构约束
@@ -92,3 +92,11 @@
 - 不引入重型大数据平台。
 - 不做多云兼容抽象层。
 - 不在仓库提交任何真实 token 或密钥。
+
+## 2026-09-30 当前架构更新
+
+CMA `provider → BulletinService → WeatherRepository → Dashboard API → BulletinFeed` 构成独立公告链路；与预警、位置预报分别提交和记录状态。新增 `bulletin_records` 表保存发布时间及抓取时间、主题、省份、原文和来源。
+
+API 启动只初始化结构；worker 定时采集，API 按需缓存请求坐标的预报，禁止跨坐标替代。正式 CMA/NMC 预警仅采用有发布时间的官方标题颜色，近 24 小时展示窗口并不表示官方有效期。
+
+生产为 PostgreSQL + API + worker + Nginx 静态 web，无 Redis。API/worker 共用 uv 锁定镜像，数据库内网开放，web/API 默认仅本机绑定。开发默认本机 uv API/worker + Vite，可切换容器后端。

@@ -1,10 +1,12 @@
-FROM node:20-alpine
-
+FROM node:22-alpine AS build
 WORKDIR /app
-COPY package.json tsconfig.json vite.config.ts index.html ./
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY tsconfig.json vite.config.ts index.html ./
 COPY src ./src
+RUN npm run build
 
-RUN npm install
-
-EXPOSE 5173
-CMD ["npm", "run", "dev"]
+FROM nginxinc/nginx-unprivileged:1.28-alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 8080

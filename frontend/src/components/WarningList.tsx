@@ -1,4 +1,5 @@
 import { WarningItem } from "../types";
+import { formatTime } from "../lib/time";
 
 type Props = {
   warnings: WarningItem[];
@@ -19,7 +20,7 @@ function levelClass(level: string): string {
   if (level.includes("红")) return "lv-red";
   if (level.includes("橙")) return "lv-orange";
   if (level.includes("黄")) return "lv-yellow";
-  return "lv-blue";
+  return level.includes("蓝") ? "lv-blue" : "lv-unknown";
 }
 
 export function WarningList({ warnings, focusProvince, activeWarningKey, onWarningClick }: Props) {
@@ -39,8 +40,11 @@ export function WarningList({ warnings, focusProvince, activeWarningKey, onWarni
   const scrollable = sortedWarnings.length > 6;
 
   return (
-    <section className="card">
-      <h3>预警信息</h3>
+    <section className="card warning-panel">
+      <span className="eyebrow">WARNING SIGNALS</span>
+      <h2>近期预警 <span className="count-pill">{warnings.length}</span></h2>
+      <p className="section-description">当前省份优先展示，点击条目联动地图。</p>
+      {warnings.length === 0 && <div className="empty-state">当前没有可展示的正式预警。天气公报与展望请查看 CMA 公开消息。</div>}
       <ul className={scrollable ? "warning-list scrollable" : "warning-list"}>
         {sortedWarnings.map((item) => (
           <li
@@ -51,6 +55,7 @@ export function WarningList({ warnings, focusProvince, activeWarningKey, onWarni
             ].join(" ").trim()}
             onClick={() => onWarningClick?.(item)}
             onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return;
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
                 onWarningClick?.(item);
@@ -65,12 +70,12 @@ export function WarningList({ warnings, focusProvince, activeWarningKey, onWarni
             </div>
             <p>{item.summary}</p>
             <p className="meta">
-              {item.province} | {item.hazard_type} | {new Date(item.issue_time).toLocaleString()}
+              {item.province} · {item.hazard_type} · {formatTime(item.issue_time)} 发布
             </p>
             <p className="meta">
               来源：{item.source} {item.is_ai_augmented ? "（辅助解读）" : ""}
               {" | "}
-              <a href={item.detail_url} target="_blank" rel="noreferrer">原文</a>
+              <a href={item.detail_url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>原文 ↗</a>
             </p>
           </li>
         ))}

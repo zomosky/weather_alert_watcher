@@ -51,4 +51,32 @@ export type DashboardResponse = {
   forecast_points: ForecastPoint[];
   last_refresh_at: string | null;
   refresh_interval_minutes: number;
+  bulletins: BulletinItem[];
+  source_statuses: SourceStatusItem[];
+  forecast_source: string | null;
+  forecast_location: string | null;
+};
+
+export type BulletinItem = {
+  id: string;
+  source: string;
+  source_url: string;
+  title: string;
+  summary: string;
+  provinces: string[];
+  hazard_types: string[];
+  kind: "bulletin" | "outlook" | "official_warning";
+  warning_level: string | null;
+  published_at: string | null;
+  fetched_at: string;
+};
+
+export type SourceStatusItem = {
+  name: string;
+  provider: string;
+  state: "ok" | "degraded" | "stale" | "waiting" | "disabled" | "demo";
+  last_success_at: string | null;
+  last_attempt_at: string | null;
+  message: string | null;
+  source_url: string | null;
 };

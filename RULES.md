@@ -40,7 +40,7 @@
 ## 开发效率规则
 1. 前端开发默认使用 `npm run dev` 热更新，避免频繁 `docker compose up --build`。
 2. 仅在依赖变更时执行 `npm install` 或镜像重建。
-3. 推荐使用 `dev.sh` / `dev-stop.sh` 统一启动与停止开发环境，避免端口冲突与残留容器。
+3. 使用 `dev.sh` / `dev-stop.sh` 启停本机开发；`DEV_BACKEND=docker` 切换容器后端。仅停止本项目创建的进程。
 
 ## 演示与生产分离规则
 1. 演示数据必须显式标识（例如 source 为 `MockScenario`）。

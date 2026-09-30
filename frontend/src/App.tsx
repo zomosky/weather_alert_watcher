@@ -1,162 +1,109 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChinaMapPanel } from "./components/ChinaMapPanel";
 import { ForecastChart } from "./components/ForecastChart";
 import { LocationPanel } from "./components/LocationPanel";
 import { WarningList } from "./components/WarningList";
+import { BulletinFeed } from "./components/BulletinFeed";
+import { SourceStatus } from "./components/SourceStatus";
 import { fetchDashboard } from "./services/api";
-import { DashboardResponse, LocationPayload, MapPickPoint, ProvinceCoord, SelectedLocation, WarningItem } from "./types";
+import { normalizeProvinceName, PROVINCE_CAPITAL_COORDS } from "./lib/location";
+import { formatTime } from "./lib/time";
+import { DashboardResponse, LocationPayload, MapPickPoint, SelectedLocation, WarningItem } from "./types";
 
-const defaultLocation: SelectedLocation = {
-  lat: 39.9042,
-  lon: 116.4074,
-  province: "北京",
-};
-
-function normalizeProvinceName(name: string): string {
-  return name
-    .replace(/特别行政区/g, "")
-    .replace(/维吾尔自治区|回族自治区|壮族自治区|自治区/g, "")
-    .replace(/省|市/g, "")
-    .trim();
-}
-
-const PROVINCE_CAPITAL_COORDS: Record<string, ProvinceCoord> = {
-  北京: { lat: 39.9042, lon: 116.4074 },
-  天津: { lat: 39.3434, lon: 117.3616 },
-  上海: { lat: 31.2304, lon: 121.4737 },
-  重庆: { lat: 29.4316, lon: 106.9123 },
-  河北: { lat: 38.0428, lon: 114.5149 },
-  山西: { lat: 37.8706, lon: 112.5489 },
-  辽宁: { lat: 41.8057, lon: 123.4315 },
-  吉林: { lat: 43.8171, lon: 125.3235 },
-  黑龙江: { lat: 45.756, lon: 126.6425 },
-  江苏: { lat: 32.0603, lon: 118.7969 },
-  浙江: { lat: 30.2741, lon: 120.1551 },
-  安徽: { lat: 31.8206, lon: 117.2272 },
-  福建: { lat: 26.0745, lon: 119.2965 },
-  江西: { lat: 28.6829, lon: 115.8579 },
-  山东: { lat: 36.6512, lon: 117.12 },
-  河南: { lat: 34.7466, lon: 113.6254 },
-  湖北: { lat: 30.5928, lon: 114.3055 },
-  湖南: { lat: 28.2282, lon: 112.9388 },
-  广东: { lat: 23.1291, lon: 113.2644 },
-  海南: { lat: 20.0442, lon: 110.1999 },
-  四川: { lat: 30.5728, lon: 104.0668 },
-  贵州: { lat: 26.647, lon: 106.6302 },
-  云南: { lat: 25.0389, lon: 102.7183 },
-  陕西: { lat: 34.3416, lon: 108.9398 },
-  甘肃: { lat: 36.0611, lon: 103.8343 },
-  青海: { lat: 36.6171, lon: 101.7782 },
-  内蒙古: { lat: 40.8426, lon: 111.7492 },
-  广西: { lat: 22.817, lon: 108.3669 },
-  西藏: { lat: 29.652, lon: 91.1721 },
-  宁夏: { lat: 38.4872, lon: 106.2309 },
-  新疆: { lat: 43.8256, lon: 87.6168 },
-  香港: { lat: 22.3193, lon: 114.1694 },
-  澳门: { lat: 22.1987, lon: 113.5439 },
-  台湾: { lat: 25.033, lon: 121.5654 },
-};
+const defaultLocation: SelectedLocation = { lat: 39.9042, lon: 116.4074, province: "北京" };
 
 export default function App() {
   const [data, setData] = useState<DashboardResponse | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [selectedLocation, setSelectedLocation] = useState<SelectedLocation>(defaultLocation);
-  const [activeWarningKey, setActiveWarningKey] = useState<string>("");
+  const [loadedPayload, setLoadedPayload] = useState<LocationPayload | null>(null);
+  const [activeWarningKey, setActiveWarningKey] = useState("");
+  const requestRef = useRef<AbortController | null>(null);
 
   const load = async (payload: LocationPayload) => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    const timeout = window.setTimeout(() => controller.abort("timeout"), 45000);
     setLoading(true);
     setError("");
     try {
-      const next = await fetchDashboard(payload);
-      setData(next);
+      const next = await fetchDashboard(payload, controller.signal);
+      if (requestRef.current === controller) { setData(next); setLoadedPayload(payload); }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
+      if (requestRef.current === controller && (!controller.signal.aborted || controller.signal.reason === "timeout")) {
+        setError(controller.signal.aborted ? "请求超时，请重试或查看来源状态。" : err instanceof Error ? err.message : "加载失败");
+      }
     } finally {
-      setLoading(false);
+      window.clearTimeout(timeout);
+      if (requestRef.current === controller) setLoading(false);
     }
   };
 
   useEffect(() => {
     void load(defaultLocation);
+    return () => requestRef.current?.abort();
   }, []);
 
-  const submitLocation = () => {
-    void load(selectedLocation);
-  };
-
+  const submitLocation = () => { void load(selectedLocation); };
   const handleMapPick = (point: MapPickPoint) => {
     setActiveWarningKey("");
-    setSelectedLocation((prev) => ({
-      ...prev,
-      lat: Number(point.lat.toFixed(4)),
-      lon: Number(point.lon.toFixed(4)),
-      province: point.province ?? prev.province,
-    }));
+    const next = { ...selectedLocation, lat: Number(point.lat.toFixed(4)), lon: Number(point.lon.toFixed(4)), province: point.province ?? selectedLocation.province };
+    setSelectedLocation(next);
+    void load(next);
   };
-
+  const focusProvince = (name: string) => {
+    const province = normalizeProvinceName(name);
+    const next = { ...selectedLocation, ...PROVINCE_CAPITAL_COORDS[province], province };
+    setSelectedLocation(next);
+    void load(next);
+  };
   const handleWarningClick = (warning: WarningItem) => {
-    const warningKey = `${warning.title}-${warning.issue_time}`;
-    setActiveWarningKey(warningKey);
-    const province = normalizeProvinceName(warning.province);
-    const coord = PROVINCE_CAPITAL_COORDS[province];
-    const nextLocation: SelectedLocation = {
-      lat: coord ? coord.lat : selectedLocation.lat,
-      lon: coord ? coord.lon : selectedLocation.lon,
-      province,
-      address: selectedLocation.address,
-    };
-    setSelectedLocation(nextLocation);
-    void load(nextLocation);
+    setActiveWarningKey(`${warning.title}-${warning.issue_time}`);
+    focusProvince(warning.province);
   };
-
   const handleProvinceFocus = (province: string) => {
     setActiveWarningKey("");
-    const normalizedProvince = normalizeProvinceName(province);
-    const coord = PROVINCE_CAPITAL_COORDS[normalizedProvince];
-    const nextLocation: SelectedLocation = {
-      lat: coord ? coord.lat : selectedLocation.lat,
-      lon: coord ? coord.lon : selectedLocation.lon,
-      province: normalizedProvince,
-      address: selectedLocation.address,
-    };
-    setSelectedLocation(nextLocation);
-    void load(nextLocation);
+    focusProvince(province);
   };
+  const demo = data?.warnings.some((w) => w.source.startsWith("Mock")) || data?.forecast_source?.startsWith("Mock");
+  const unhealthy = data?.source_statuses.filter((s) => ["degraded", "stale"].includes(s.state)).length || 0;
+  const loadedLocation = loadedPayload?.province;
+  const locationChanged = !!loadedPayload && (loadedPayload.lat !== selectedLocation.lat || loadedPayload.lon !== selectedLocation.lon || loadedPayload.province !== selectedLocation.province);
 
   return (
     <main className="page">
-      <header>
-        <h1>全国极端天气展示看板</h1>
-        <p>当前刷新周期：30 分钟，当前省份优先高亮</p>
-        {data?.last_refresh_at && <p>最近刷新：{new Date(data.last_refresh_at).toLocaleString()}</p>}
+      <header className="masthead">
+        <div className="brand-row"><span className="brand-mark">WX</span><span>气象观察 <span className="brand-divider">/</span> 全国极端天气</span><span className="live-pill">{demo ? "含演示数据" : "公开数据观察"}</span></div>
+        <div className="hero-row"><div><span className="eyebrow">NATIONAL WEATHER WATCH</span><h1>全国极端天气看板</h1><p>从官方披露到区域态势，关注每一次天气变化。</p></div>
+          <div className="hero-refresh"><span>最近完整更新</span><strong>{formatTime(data?.last_refresh_at)}</strong><small>采集间隔 {data?.refresh_interval_minutes || 30} 分钟</small></div>
+        </div>
       </header>
-
-      <LocationPanel value={selectedLocation} onChange={setSelectedLocation} onSubmit={submitLocation} />
-
-      {loading && <p>正在加载数据...</p>}
-      {error && <p className="error">{error}</p>}
-
-      {data && (
-        <>
-          <div className="layout-2">
-            <ChinaMapPanel
-              focusProvince={selectedLocation.province ?? data.current_province}
-              warnings={data.warnings}
-              selectedLocation={selectedLocation}
-              onMapPick={handleMapPick}
-              onProvinceFocus={handleProvinceFocus}
-            />
-            <WarningList
-              warnings={data.warnings}
-              focusProvince={selectedLocation.province ?? data.current_province ?? undefined}
-              activeWarningKey={activeWarningKey}
-              onWarningClick={handleWarningClick}
-            />
-          </div>
-          <ForecastChart points={data.forecast_points} />
-        </>
-      )}
+      <div className="overview-grid" aria-label="气象信息摘要">
+        <div className="stat-card"><span>当前关注</span><strong>{selectedLocation.province || "自选位置"}</strong><small>{selectedLocation.lat.toFixed(4)}°N · {selectedLocation.lon.toFixed(4)}°E</small></div>
+        <div className="stat-card"><span>近期正式预警</span><strong>{data?.warnings.length ?? "—"}<em>条</em></strong><small>{demo ? "包含明确标注的演示预警" : "按官方标题识别 · 近 24 小时发布"}</small></div>
+        <div className="stat-card"><span>CMA 公开消息</span><strong>{data?.bulletins.length ?? "—"}<em>篇</em></strong><small>天气公报 · 预警发布 · 中期展望</small></div>
+        <div className="stat-card"><span>来源状态</span><strong className={unhealthy ? "text-amber" : "text-teal"}>{unhealthy ? `${unhealthy} 项待恢复` : data ? "已检查" : "待检查"}</strong><small>各来源状态与最近成功时间见下方</small></div>
+      </div>
+      <LocationPanel value={selectedLocation} onChange={setSelectedLocation} onSubmit={submitLocation} loading={loading} />
+      {loading && <p className="loading-banner" role="status">正在更新 {selectedLocation.province || "当前位置"} 的看板信息…</p>}
+      {error && <p className="error-banner" role="alert">{error}</p>}
+      {demo && <p className="demo-banner">当前预警或曲线包含演示数据，具体来源已标注。CMA 公告来自公开披露。</p>}
+      {data && locationChanged && <p className="loading-banner">位置已切换；下方信息对应上次加载的 {loadedLocation || "坐标"}，请更新看板。</p>}
+      {data && <>
+        <div className="layout-2">
+          <ChinaMapPanel focusProvince={selectedLocation.province ?? data.current_province} warnings={data.warnings}
+            selectedLocation={selectedLocation} onMapPick={handleMapPick} onProvinceFocus={handleProvinceFocus} />
+          <WarningList warnings={data.warnings} focusProvince={selectedLocation.province ?? data.current_province ?? undefined}
+            activeWarningKey={activeWarningKey} onWarningClick={handleWarningClick} />
+        </div>
+        <BulletinFeed bulletins={data.bulletins} province={selectedLocation.province} onProvinceFocus={handleProvinceFocus} />
+        <ForecastChart points={data.forecast_points} source={data.forecast_source} location={data.forecast_location} />
+        <SourceStatus statuses={data.source_statuses} />
+      </>}
+      {!data && !loading && <section className="card empty-state">看板暂未加载，请使用“更新看板”重试。</section>}
+      <footer className="page-footer"><span>气象观察 · 全国极端天气看板</span><span>发布时间与采集时间独立展示 · 来源可追溯</span></footer>
     </main>
   );
 }

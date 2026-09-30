@@ -1,0 +1,21 @@
+[project]
+name = "weather-alert-watcher"
+version = "0.2.0"
+description = "CMA disclosures and extreme weather dashboard"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi==0.115.8", "uvicorn[standard]==0.34.0", "sqlalchemy==2.0.38",
+  "pydantic==2.10.6", "pydantic-settings==2.7.1", "python-dateutil==2.9.0.post0",
+  "httpx==0.28.1", "apscheduler==3.11.0", "psycopg[binary]==3.2.4",
+  "beautifulsoup4==4.13.3",
+]
+
+[dependency-groups]
+dev = ["pytest==8.3.4"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend"]

@@ -3,6 +3,8 @@ __pycache__/
 *.pyo
 *.pyd
 .env
+.env.*
+!.env.example
 .venv/
 .pytest_cache/
 .mypy_cache/
@@ -10,3 +12,11 @@ node_modules/
 frontend/dist/
 *.db
 .DS_Store
+.cache/
+artifacts/
+.run/
+*.log
+*.db-*
+*.sqlite
+*.sqlite3
+weather-backup*.sql
