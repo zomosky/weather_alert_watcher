@@ -5,9 +5,12 @@ import { LocationPanel } from "./components/LocationPanel";
 import { WarningList } from "./components/WarningList";
 import { BulletinFeed } from "./components/BulletinFeed";
 import { SourceStatus } from "./components/SourceStatus";
+import { LocalSignalFeed } from "./components/LocalSignalFeed";
+import { OfficialResources } from "./components/OfficialResources";
 import { fetchDashboard } from "./services/api";
 import { normalizeProvinceName, PROVINCE_CAPITAL_COORDS } from "./lib/location";
 import { formatTime } from "./lib/time";
+import { warningKey } from "./lib/warnings";
 import { DashboardResponse, LocationPayload, MapPickPoint, SelectedLocation, WarningItem } from "./types";
 
 const defaultLocation: SelectedLocation = { lat: 39.9042, lon: 116.4074, province: "北京" };
@@ -60,7 +63,7 @@ export default function App() {
     void load(next);
   };
   const handleWarningClick = (warning: WarningItem) => {
-    setActiveWarningKey(`${warning.title}-${warning.issue_time}`);
+    setActiveWarningKey(warningKey(warning));
     focusProvince(warning.province);
   };
   const handleProvinceFocus = (province: string) => {
@@ -82,8 +85,8 @@ export default function App() {
       </header>
       <div className="overview-grid" aria-label="气象信息摘要">
         <div className="stat-card"><span>当前关注</span><strong>{selectedLocation.province || "自选位置"}</strong><small>{selectedLocation.lat.toFixed(4)}°N · {selectedLocation.lon.toFixed(4)}°E</small></div>
-        <div className="stat-card"><span>近期正式预警</span><strong>{data?.warnings.length ?? "—"}<em>条</em></strong><small>{demo ? "包含明确标注的演示预警" : "按官方标题识别 · 近 24 小时发布"}</small></div>
-        <div className="stat-card"><span>CMA 公开消息</span><strong>{data?.bulletins.length ?? "—"}<em>篇</em></strong><small>天气公报 · 预警发布 · 中期展望</small></div>
+        <div className="stat-card"><span>全国预警涉及地区</span><strong>{data?.warnings.length ?? "—"}<em>条</em></strong><small>{demo ? "包含明确标注的演示预警" : "官方发布语句 · 按地区预报时段"}</small></div>
+        <div className="stat-card"><span>CMA 公开消息</span><strong>{data?.bulletins.length ?? "—"}<em>篇</em></strong><small>公报 · 预警 · 解除 · 风险 · 展望</small></div>
         <div className="stat-card"><span>来源状态</span><strong className={unhealthy ? "text-amber" : "text-teal"}>{unhealthy ? `${unhealthy} 项待恢复` : data ? "已检查" : "待检查"}</strong><small>各来源状态与最近成功时间见下方</small></div>
       </div>
       <LocationPanel value={selectedLocation} onChange={setSelectedLocation} onSubmit={submitLocation} loading={loading} />
@@ -100,7 +103,9 @@ export default function App() {
         </div>
         <BulletinFeed bulletins={data.bulletins} province={selectedLocation.province} onProvinceFocus={handleProvinceFocus} />
         <ForecastChart points={data.forecast_points} source={data.forecast_source} location={data.forecast_location} />
+        <LocalSignalFeed signals={data.local_signals} province={selectedLocation.province} />
         <SourceStatus statuses={data.source_statuses} />
+        <OfficialResources />
       </>}
       {!data && !loading && <section className="card empty-state">看板暂未加载，请使用“更新看板”重试。</section>}
       <footer className="page-footer"><span>气象观察 · 全国极端天气看板</span><span>发布时间与采集时间独立展示 · 来源可追溯</span></footer>

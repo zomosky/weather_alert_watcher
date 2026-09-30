@@ -52,6 +52,7 @@ export type DashboardResponse = {
   last_refresh_at: string | null;
   refresh_interval_minutes: number;
   bulletins: BulletinItem[];
+  local_signals: BulletinItem[];
   source_statuses: SourceStatusItem[];
   forecast_source: string | null;
   forecast_location: string | null;
@@ -65,7 +66,7 @@ export type BulletinItem = {
   summary: string;
   provinces: string[];
   hazard_types: string[];
-  kind: "bulletin" | "outlook" | "official_warning";
+  kind: "bulletin" | "outlook" | "official_warning" | "cancelled_warning" | "risk_notice" | "local_signal";
   warning_level: string | null;
   published_at: string | null;
   fetched_at: string;

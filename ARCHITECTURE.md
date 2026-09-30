@@ -97,6 +97,6 @@
 
 CMA `provider → BulletinService → WeatherRepository → Dashboard API → BulletinFeed` 构成独立公告链路；与预警、位置预报分别提交和记录状态。新增 `bulletin_records` 表保存发布时间及抓取时间、主题、省份、原文和来源。
 
-API 启动只初始化结构；worker 定时采集，API 按需缓存请求坐标的预报，禁止跨坐标替代。正式 CMA/NMC 预警仅采用有发布时间的官方标题颜色，近 24 小时展示窗口并不表示官方有效期。
+API 启动只初始化结构；worker 定时采集，API 按需缓存请求坐标的预报，禁止跨坐标替代。正式 CMA/NMC 预警采用有发布时间的官方标题/首段发布语句与明确区域颜色，按原文预报时段过滤；未披露时使用近 24 小时展示窗，不能声明官方有效期。地方分页索引独立更新与展示，不参与全国省份填色；完整性错误保留旧快照。
 
 生产为 PostgreSQL + API + worker + Nginx 静态 web，无 Redis。API/worker 共用 uv 锁定镜像，数据库内网开放，web/API 默认仅本机绑定。开发默认本机 uv API/worker + Vite，可切换容器后端。

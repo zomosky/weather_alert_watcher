@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.providers.base import IngestionContext
+from app.providers.cma_local_signals import LOCAL_INDEX_URL
 from app.schemas import BulletinItem, DashboardResponse, ForecastPointItem, LocationRequest, ProvinceItem, SourceStatusItem, WarningItem
 from app.services.bulletins import source_key
 from app.services.forecast import ForecastService, forecast_key
@@ -12,6 +13,12 @@ from app.services.province import sorted_provinces
 from app.storage.repository import WeatherRepository
 
 router = APIRouter()
+
+
+def bulletin_item(b):
+    return BulletinItem(id=b.id, source=b.source, source_url=b.source_url, title=b.title, summary=b.summary,
+                        provinces=b.provinces, hazard_types=b.hazard_types, kind=b.kind, warning_level=b.warning_level,
+                        published_at=b.published_at, fetched_at=b.fetched_at)
 
 
 @router.get("/health")
@@ -63,6 +70,7 @@ def dashboard(payload: LocationRequest, db: Session = Depends(get_db)) -> Dashbo
         source_status(repo, settings, "warnings", "正式预警", settings.warning_provider),
         source_status(repo, settings, forecast_pipeline, "当前坐标预报", settings.forecast_provider),
         source_status(repo, settings, "bulletins", "CMA 公开消息", "CMA/NMC", settings.cma_bulletins_enabled),
+        source_status(repo, settings, "local_signals", "地方预警分页索引", "CMA/NMC 地方索引", settings.cma_local_signals_enabled, LOCAL_INDEX_URL),
     ]
     for url in settings.cma_source_urls_list:
         statuses.append(source_status(repo, settings, source_key(url), url.split("/publish/")[-1], "CMA/NMC", settings.cma_bulletins_enabled, url))
@@ -75,10 +83,9 @@ def dashboard(payload: LocationRequest, db: Session = Depends(get_db)) -> Dashbo
                               is_ai_augmented="LLM" in w.source) for w in warnings],
         forecast_points=[ForecastPointItem(forecast_time=f.forecast_time, temperature_c=f.temperature_c, humidity_pct=f.humidity_pct) for f in forecast_rows],
         last_refresh_at=repo.get_last_refresh("ingestion"), refresh_interval_minutes=settings.refresh_interval_minutes,
-        bulletins=[BulletinItem(id=b.id, source=b.source, source_url=b.source_url, title=b.title, summary=b.summary,
-                               provinces=b.provinces, hazard_types=b.hazard_types, kind=b.kind, warning_level=b.warning_level,
-                               published_at=b.published_at, fetched_at=b.fetched_at)
+        bulletins=[bulletin_item(b)
                    for b in repo.list_bulletins(settings.bulletin_retention_hours)] if settings.cma_bulletins_enabled else [],
+        local_signals=[bulletin_item(b) for b in repo.list_local_signals()] if settings.cma_local_signals_enabled else [],
         source_statuses=statuses, forecast_source=forecast_rows[0].source if forecast_rows else None,
         forecast_location=forecast_rows[0].location_label if forecast_rows else None,
     )

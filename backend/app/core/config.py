@@ -2,6 +2,7 @@ from functools import lru_cache
 from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from app.core.cma_sources import DEFAULT_WARNING_URLS
 
 
 class Settings(BaseSettings):
@@ -17,6 +18,10 @@ class Settings(BaseSettings):
     forecast_provider: Literal["mock", "openmeteo", "qweather"] = "openmeteo"
     fallback_to_mock_on_failure: bool = False
     cma_bulletins_enabled: bool = True
+    cma_warning_source_urls: str = DEFAULT_WARNING_URLS
+    cma_local_signals_enabled: bool = True
+    cma_local_source_url: str = "https://www.nmc.cn/rest/findAlarm"
+    cma_local_max_pages: int = Field(default=30, ge=1, le=100)
     bulletin_retention_hours: int = Field(default=72, ge=1, le=720)
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
@@ -59,7 +64,9 @@ class Settings(BaseSettings):
 
     @property
     def cma_source_urls_list(self) -> list[str]:
-        return [item.strip() for item in self.cma_source_urls.split(",") if item.strip()]
+        urls = [item.strip().replace("/publish/typhoon/warning_index.html", "/publish/country/warning/typhoon.html")
+                for item in (self.cma_source_urls + "," + self.cma_warning_source_urls).split(",") if item.strip()]
+        return list(dict.fromkeys(urls))
 
 
 @lru_cache

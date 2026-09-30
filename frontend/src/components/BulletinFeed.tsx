@@ -2,7 +2,7 @@ import { useState } from "react";
 import { BulletinItem } from "../types";
 import { formatTime } from "../lib/time";
 
-const KIND_LABELS = { bulletin: "天气公报", official_warning: "官方预警发布", outlook: "中期展望" };
+const KIND_LABELS = { bulletin: "天气公报", official_warning: "官方预警发布", outlook: "中期展望", cancelled_warning: "预警解除", risk_notice: "风险预报", local_signal: "地方信号" };
 
 export function BulletinFeed({ bulletins, province, onProvinceFocus }: {
   bulletins: BulletinItem[];
@@ -19,9 +19,9 @@ export function BulletinFeed({ bulletins, province, onProvinceFocus }: {
         <div><span className="eyebrow">PUBLIC DISCLOSURES</span><h2 id="disclosure-title">CMA 公开消息 <span className="count-pill">{bulletins.length}</span></h2></div>
         <label className="inline-check"><input type="checkbox" checked={localOnly} onChange={(e) => setLocalOnly(e.target.checked)} />关注{province || "当前省份"}</label>
       </div>
-      <p className="section-description">中央气象台公开披露的天气信息。展望单独标注，颜色预警以官方发布为依据。</p>
+      <p className="section-description">公报、联合风险预警和解除信息分类展示。关键词可能涉及历史或否定表述，颜色以官方发布及具体区域为准。</p>
       <div className="filter-tabs" role="group" aria-label="公告类型筛选">
-        {[["all", "全部消息"], ["bulletin", "天气公报"], ["official_warning", "预警发布"], ["outlook", "中期展望"]].map(([value, label]) => (
+        {[["all", "全部消息"], ["bulletin", "天气公报"], ["official_warning", "预警发布"], ["cancelled_warning", "预警解除"], ["risk_notice", "风险预报"], ["outlook", "中期展望"]].map(([value, label]) => (
           <button type="button" key={value} className={kind === value ? "tab active" : "tab"} aria-pressed={kind === value} onClick={() => setKind(value)}>{label}</button>
         ))}
       </div>

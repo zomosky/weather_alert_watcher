@@ -6,8 +6,10 @@
 
 - CMA 消息复用相邻 `cma_publish` 项目的公开来源、并发抓取和失败隔离思路，采集实现完整保存在本仓库；运行与构建不依赖相邻目录，不读取其私密设置，也不发送邮件。
 - 公告保留原文 URL、发布时间、抓取时间、省份和天气主题。正文来自中央气象台页面的 `.writing`，排除导航、页脚和脚本。
-- 天气公报、官方预警发布、中期展望分别展示；`mid-range` 只作为展望。主题标签表示原文涉及内容，可能包含回顾或“无影响”等表述，不能作为省级实时风险判断。
-- 地图颜色仅采用有明确官方标题颜色、明确发布时间的预警；不把大暴雨等强度换算为官方颜色。CMA 预警地图使用近 24 小时发布窗口，该窗口不是官方有效期的声明。解除、取消的预警不进入地图。
+- 天气公报、官方预警发布、预警解除、风险预报、中期展望分别展示；`mid-range` 只作为展望。主题标签表示原文涉及内容，可能包含回顾或“无影响”等表述，不能作为省级实时风险判断。
+- 地图采用官方标题或正文首段发布语句中的明确颜色与发布时间；联合风险按正文明确带颜色的区域分配，不能把标题最高颜色推广到所有省份。原文披露预报范围时按地区截止过滤，`expires_at` 表示原文预报覆盖截止，不是官方解除时间；未披露时仅展示近 24 小时发布。解除、取消和历史过期产品不进入地图。
+- 来源扩展为 22 个全国产品页面：公报、12 类灾害预警、山洪/地质/中小河流洪水/渍涝风险、强对流和森林火险。
+- 地方信号通过 NMC 官网查询页使用的公开分页索引单独采集，检查页数、数量、重复与链接。完整快照成功后才替换；失败保留旧快照并显示异常。索引未提供完整有效/解除状态，省市县标题和原文链接保留，不能作为全省统一风险或全部当前有效预警清单。
 - 公告默认保留近 72 小时，每个来源展示最新版本。缺少发布时间时明确标注，不能进入正式预警。来源失败保留窗口内已有数据，不生成模拟公告。
 - 默认使用真实 CMA + Open-Meteo，关闭模拟回退。预报严格匹配请求坐标；缺失时显示空态。切换位置可按需采集并缓存该位置预报。
 - `CMA_BULLETINS_ENABLED=false` 仅关闭公告入库和展示；`WARNING_PROVIDER=cma` 仍独立采集正式预警。公告开启时复用该轮采集结果，避免重复请求；来源失败保留已有预警，不回退到模拟 CMA 预警。
@@ -103,7 +105,11 @@ docker compose exec -T db pg_dump -U weather weather > weather-backup.sql
 | `WARNING_PROVIDER` | `cma`；另支持 `qweather`、`nmc`、`mock` |
 | `FORECAST_PROVIDER` | `openmeteo`；另支持 `qweather`、`mock` |
 | `CMA_BULLETINS_ENABLED` | `true`，独立公告链路开关 |
-| `CMA_SOURCE_URLS` | 与 cma_publish 一致的 5 个中央气象台公开来源 |
+| `CMA_SOURCE_URLS` | 5 个基础公报来源；台风旧 URL 归一化去重 |
+| `CMA_WARNING_SOURCE_URLS` | 新增全国灾害预警/风险产品，与基础来源合并；空值关闭补充源 |
+| `CMA_LOCAL_SIGNALS_ENABLED` | `true`，地方预警索引独立开关 |
+| `CMA_LOCAL_SOURCE_URL` | 已验证的 NMC 官网查询地址，非有稳定性承诺的正式接口 |
+| `CMA_LOCAL_MAX_PAGES` | `30`，每页请求 100 条；超限报错，不静默截断 |
 | `BULLETIN_RETENTION_HOURS` | `72`，公告保留窗口 |
 | `REFRESH_INTERVAL_MINUTES` | `30`，worker 刷新与预报缓存间隔 |
 | `FALLBACK_TO_MOCK_ON_FAILURE` | `false`；开发演示可开，UI 显示演示标识 |
@@ -122,6 +128,7 @@ docker compose exec -T db pg_dump -U weather weather > weather-backup.sql
 uv run pytest backend/tests/test_cma_bulletins.py -q
 uv run pytest backend/tests/test_data_pipeline.py -q
 uv run pytest backend/tests/test_ingestion_switches.py -q
+uv run pytest backend/tests/test_cma_warning_accuracy.py backend/tests/test_cma_local_signals.py -q
 cd frontend && npm run build
 docker compose config --quiet
 ```
@@ -131,9 +138,12 @@ docker compose config --quiet
 ```bash
 uv run pytest --junitxml=artifacts/validation/backend-tests.xml
 uv run python scripts/acceptance.py
+PYTHONPATH=backend uv run python scripts/cma_audit.py
+# 原始官方样本离线重放，冻结样本时刻
+PYTHONPATH=backend uv run python scripts/cma_audit.py --offline artifacts/cma-audit --as-of 2026-09-30T06:30:00+00:00 --output artifacts/cma-audit/replay
 ```
 
-验收脚本验证静态部署、数据库就绪、CMA 来源和时间、北京/四川真实预报，以及没有模拟数据；保存 API 样本、时间戳报告与 SHA-256。浏览器另验证省份联动、公告筛选、原文摘录、空态和移动端布局，并保存截图。容器健康表示进程或数据库可用，数据是否及时以看板来源状态为准。
+验收脚本验证静态部署、数据库就绪、CMA 来源和时间、北京/四川真实预报，以及没有模拟数据；保存 API 样本、时间戳报告与 SHA-256。浏览器另验证省份联动、公告筛选、原文摘录、空态和移动端布局，并保存截图。容器健康表示进程或数据库可用，数据是否及时以看板来源状态为准。官方核查结论、遗漏边界与补充数据方向见 [CMA 核查报告](docs/cma-warning-audit.md)。当前 30 分钟轮询不是即时发布通道，可按需求调整 `REFRESH_INTERVAL_MINUTES`；正式预警生命周期和空间落区应接入经授权的结构化数据服务。
 
 ## API
 

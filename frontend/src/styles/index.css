@@ -395,3 +395,15 @@ h3 { margin: 12px 0 10px; }
   .south-sea-inset { width: 100px; }
   .stat-card small { line-height: 1.6; }
 }
+:root { --local-row-border: #e5ebe9; }
+.local-signal-list { list-style: none; padding: 0; margin: 18px 0; }
+.local-signal-list li { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--local-row-border); }
+.local-signal-list a { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.local-signal-list .meta { margin: 6px 0 0; }
+.local-signal-list .kind-badge { flex-shrink: 0; }
+.local-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.local-pagination a { margin-left: auto; font-size: 13px; }
+.kind-badge.cancelled_warning { color: #64748b; background: #eef2f5; }
+.kind-badge.risk_notice { color: #8a5a17; background: #fff5df; }
+.official-resource-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 12px; margin-top: 18px; }
+.official-resource-grid a { display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--local-row-border); border-radius: 12px; }

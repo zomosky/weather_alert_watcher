@@ -76,6 +76,7 @@ class DashboardResponse(UtcModel):
     last_refresh_at: datetime | None
     refresh_interval_minutes: int
     bulletins: list[BulletinItem] = Field(default_factory=list)
+    local_signals: list[BulletinItem] = Field(default_factory=list)
     source_statuses: list[SourceStatusItem] = Field(default_factory=list)
     forecast_source: str | None = None
     forecast_location: str | None = None

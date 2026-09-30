@@ -6,6 +6,7 @@ from app.providers.cma_provider import warnings_from_bulletins
 from app.providers.mock_provider import MockWeatherProvider
 from app.services.ai_extractor import AiExtractor
 from app.services.bulletins import BulletinService
+from app.services.local_signals import LocalSignalService
 from app.services.provider_factory import build_forecast_provider, build_warning_provider
 from app.storage.repository import WeatherRepository
 
@@ -27,6 +28,7 @@ class IngestionService:
         self.warning_provider = build_warning_provider(self.settings, AiExtractor(self.settings))
         self.forecast_provider = build_forecast_provider(self.settings)
         self.bulletin_service = BulletinService(repository, self.settings)
+        self.local_signal_service = LocalSignalService(repository, self.settings)
         self.fallback_provider = MockWeatherProvider()
 
     def refresh(self, payload: IngestionInput) -> None:
@@ -34,6 +36,15 @@ class IngestionService:
         errors = []
         cma_success = 0
         cma_failed = 0
+        if self.settings.cma_local_signals_enabled:
+            try:
+                self.local_signal_service.refresh()
+            except Exception as exc:
+                self.repository.db.rollback()
+                logger.exception("Local signal index refresh failed")
+                message = str(exc) if isinstance(exc, ValueError) else f"地方索引采集失败（{type(exc).__name__}）"
+                self.repository.update_refresh_status("local_signals", error=message)
+                errors.append("地方预警索引采集不完整")
         if self.settings.cma_bulletins_enabled:
             try:
                 cma_success, cma_failed = self.bulletin_service.refresh()

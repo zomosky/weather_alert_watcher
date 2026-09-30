@@ -1,5 +1,6 @@
 import { WarningItem } from "../types";
 import { formatTime } from "../lib/time";
+import { warningKey } from "../lib/warnings";
 
 type Props = {
   warnings: WarningItem[];
@@ -29,8 +30,8 @@ export function WarningList({ warnings, focusProvince, activeWarningKey, onWarni
     const aFocused = normalizedFocusProvince && normalizeProvinceName(a.province) === normalizedFocusProvince ? 1 : 0;
     const bFocused = normalizedFocusProvince && normalizeProvinceName(b.province) === normalizedFocusProvince ? 1 : 0;
     if (aFocused !== bFocused) return bFocused - aFocused;
-    const aActive = activeWarningKey === `${a.title}-${a.issue_time}` ? 1 : 0;
-    const bActive = activeWarningKey === `${b.title}-${b.issue_time}` ? 1 : 0;
+    const aActive = activeWarningKey === warningKey(a) ? 1 : 0;
+    const bActive = activeWarningKey === warningKey(b) ? 1 : 0;
     if (aActive !== bActive) return bActive - aActive;
     const score = (level: string) => (level.includes("红") ? 4 : level.includes("橙") ? 3 : level.includes("黄") ? 2 : 1);
     const diff = score(b.level) - score(a.level);
@@ -42,16 +43,16 @@ export function WarningList({ warnings, focusProvince, activeWarningKey, onWarni
   return (
     <section className="card warning-panel">
       <span className="eyebrow">WARNING SIGNALS</span>
-      <h2>近期预警 <span className="count-pill">{warnings.length}</span></h2>
-      <p className="section-description">当前省份优先展示，点击条目联动地图。</p>
-      {warnings.length === 0 && <div className="empty-state">当前没有可展示的正式预警。天气公报与展望请查看 CMA 公开消息。</div>}
+      <h2>全国预警涉及地区 <span className="count-pill">{warnings.length}</span></h2>
+      <p className="section-description">按原文涉及省份整理，预警可能仅影响省内部分地区；市县信号在下方单独展示。</p>
+      {warnings.length === 0 && <div className="empty-state">已接入全国产品暂无可展示预警；不代表全国或当前省份没有预警。可查看下方地方信号与来源状态。</div>}
       <ul className={scrollable ? "warning-list scrollable" : "warning-list"}>
         {sortedWarnings.map((item) => (
           <li
-            key={`${item.title}-${item.issue_time}`}
+            key={warningKey(item)}
             className={[
               normalizedFocusProvince && normalizeProvinceName(item.province) === normalizedFocusProvince ? "warning-focused" : "",
-              activeWarningKey === `${item.title}-${item.issue_time}` ? "warning-active" : "",
+              activeWarningKey === warningKey(item) ? "warning-active" : "",
             ].join(" ").trim()}
             onClick={() => onWarningClick?.(item)}
             onKeyDown={(event) => {
@@ -71,6 +72,9 @@ export function WarningList({ warnings, focusProvince, activeWarningKey, onWarni
             <p>{item.summary}</p>
             <p className="meta">
               {item.province} · {item.hazard_type} · {formatTime(item.issue_time)} 发布
+            </p>
+            <p className="meta">
+              {item.expires_at ? `原文预报覆盖至 ${formatTime(item.expires_at)}（不等同官方解除时间）` : "未披露截止时间；仅展示近 24 小时发布信息"}
             </p>
             <p className="meta">
               来源：{item.source} {item.is_ai_augmented ? "（辅助解读）" : ""}

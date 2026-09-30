@@ -126,12 +126,12 @@ export function ChinaMapPanel({ focusProvince, warnings, selectedLocation, onMap
         if (highlightedName === params.name) {
           const highlightLabel =
             rawValue >= 4 ? "红色" : rawValue === 3 ? "橙色" : rawValue === 2 ? "黄色" : rawValue === 1 ? "蓝色" : "无";
-          return `${params.name}<br/>当前为边界高亮模式，风险填充保持原等级色<br/>风险等级：${highlightLabel}`;
+          return `${params.name}<br/>当前为边界高亮模式，风险填充保持原等级色<br/>已接入最高等级：${highlightLabel}（省内部分地区）`;
         }
         const val = params.value ?? 0;
-        if (val <= 0) return `${params.name}<br/>当前无预警数据`;
+        if (val <= 0) return `${params.name}<br/>当前未接入可展示全国预警；不代表无风险`;
         const label = val >= 4 ? "红色" : val === 3 ? "橙色" : val === 2 ? "黄色" : "蓝色";
-        return `${params.name}<br/>最高预警等级：${label}`;
+        return `${params.name}<br/>已接入最高预警等级：${label}（省内部分地区）`;
       },
     },
     visualMap: {
@@ -141,7 +141,7 @@ export function ChinaMapPanel({ focusProvince, warnings, selectedLocation, onMap
       orient: "horizontal",
       left: "center",
       bottom: 6,
-      text: ["高风险", "低风险"],
+      text: ["红色预警", "未接入信号"],
       pieces: [
         { value: 4, label: "红色", color: "#d90429" },
         { value: 3, label: "橙色", color: "#f77f00" },
@@ -265,7 +265,7 @@ export function ChinaMapPanel({ focusProvince, warnings, selectedLocation, onMap
         当前省份：{focusProvince ?? "未指定"}（已边界高亮）
       </p>
       <p className="meta">
-        公告与中期展望在下方单独展示；选中省份仅边界高亮。
+        填色表示全国产品涉及省份的最高等级，并非全省统一风险。地方信号在下方独立展示。
       </p>
       <div className="map-toolbar">
         <button

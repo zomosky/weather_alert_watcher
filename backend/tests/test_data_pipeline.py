@@ -31,6 +31,7 @@ def repo():
 
 
 def settings(**kwargs):
+    kwargs.setdefault("cma_local_signals_enabled", False)
     return Settings(_env_file=None, warning_provider="cma", forecast_provider="mock", **kwargs)
 
 
@@ -142,3 +143,28 @@ def test_dashboard_contract_and_utc_provenance(repo, monkeypatch):
 def test_bad_provider_setting_fails_instead_of_silently_using_mock():
     with pytest.raises(ValueError):
         Settings(_env_file=None, warning_provider="misspelled-provider")
+
+
+def test_local_snapshot_replacement_does_not_touch_national_bulletins(repo):
+    repo.save_bulletin(bulletin())
+    row = bulletin(URL + "local")
+    row.kind = "local_signal"
+    repo.replace_local_signals([row])
+    assert len(repo.list_local_signals()) == 1 and len(repo.list_bulletins()) == 1
+    repo.replace_local_signals([])
+    assert repo.list_local_signals() == [] and len(repo.list_bulletins()) == 1
+
+
+def test_partial_local_index_retains_prior_snapshot_and_other_pipelines(repo):
+    row = bulletin(URL + "local")
+    row.kind = "local_signal"
+    repo.replace_local_signals([row])
+    service = IngestionService(repo, settings(cma_local_signals_enabled=True))
+    service.bulletin_service.provider.fetch = lambda: [SourceResult(URL, bulletin(title="暴雨橙色预警"))]
+    def fail():
+        raise ValueError("地方预警分页数量变化")
+    service.local_signal_service.provider.fetch = fail
+    service.refresh(IngestionInput(39.9042, 116.4074, "北京", "北京"))
+    assert len(repo.list_local_signals()) == 1
+    assert repo.get_status("local_signals").last_error == "地方预警分页数量变化"
+    assert repo.list_warnings(None) and repo.get_status("forecast").last_error is None

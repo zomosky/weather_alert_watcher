@@ -42,13 +42,20 @@ def main():
             assert datetime.fromisoformat(item["fetched_at"].replace("Z", "+00:00")).tzinfo
             if item["kind"] == "outlook":
                 assert item["warning_level"] is None
+            if item["kind"] == "cancelled_warning":
+                assert item["warning_level"] is None
             if item["warning_level"]:
-                assert item["published_at"] and item["warning_level"] + "预警" in item["title"]
+                assert item["published_at"] and item["kind"] == "official_warning" and "预警" in item["title"]
+        local = data["local_signals"]
+        assert local and len({item["id"] for item in local}) == len(local)
+        assert all(item["kind"] == "local_signal" and item["source_url"].startswith("https://www.nmc.cn/publish/alarm/") for item in local)
+        assert all(w["source"] != "CMA/NMC 地方索引" for w in data["warnings"])
         filename = "beijing.json" if province == "北京" else "sichuan.json"
         (output / filename).write_text(json.dumps(data, ensure_ascii=False, indent=2))
-        snapshots.append({"province": province, "bulletins": len(data["bulletins"]), "forecast_points": len(data["forecast_points"]), "warnings": len(data["warnings"]), "sources": [{"name": s["name"], "state": s["state"]} for s in data["source_statuses"]]})
+        snapshots.append({"province": province, "bulletins": len(data["bulletins"]), "local_signals": len(local), "forecast_points": len(data["forecast_points"]), "warnings": len(data["warnings"]), "sources": [{"name": s["name"], "state": s["state"]} for s in data["source_statuses"]]})
     checks.append("Two locations return live forecasts and traceable disclosures without mock data")
     checks.append("Outlooks and bulletin topics do not infer official warning colours")
+    checks.append("Local index has unique records and does not colour national map; cancellation has no warning colour")
     report = {"verified_at": datetime.now(timezone.utc).isoformat(), "base_url": args.base_url, "checks": checks, "snapshots": snapshots}
     (output / "api-report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2))
     hashes = {p.name: sha256(p.read_bytes()).hexdigest() for p in output.iterdir() if p.is_file() and p.name != "checksums.json"}

@@ -35,6 +35,7 @@ def warning_bulletin():
 
 def config(enabled):
     return Settings(_env_file=None, warning_provider="cma", forecast_provider="mock",
+                    cma_local_signals_enabled=False,
                     cma_bulletins_enabled=enabled, cma_source_urls=URL,
                     fallback_to_mock_on_failure=False)
 

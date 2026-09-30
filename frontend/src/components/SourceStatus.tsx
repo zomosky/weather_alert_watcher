@@ -6,6 +6,15 @@ const SOURCE_LABELS: Record<string, string> = {
   "weather-bulletin/index.htm": "天气公报", "weatherperday/index.htm": "每日天气提示",
   "typhoon/warning_index.html": "台风预警", "bulletin/mid-range.htm": "中期天气",
   "news/weather_new.html": "重要天气提示",
+  "country/warning/wind.html": "大风预警", "country/warning/strong_convection.html": "强对流预警",
+  "country/warning/downpour.html": "暴雨预警", "country/warning/typhoon.html": "台风预警",
+  "country/warning/megatemperature.html": "高温预警", "country/warning/fog.html": "大雾预警",
+  "country/warning/dust.html": "沙尘暴预警", "country/warning/blizzard.html": "暴雪预警",
+  "country/warning/cold.html": "寒潮预警", "country/warning/frozen.html": "冰冻预警",
+  "country/warning/drought.html": "气象干旱预警", "country/warning/low-temperature.html": "低温预警",
+  "mountainflood.html": "山洪灾害预警", "geohazard.html": "地质灾害风险预警",
+  "waterlogging.html": "渍涝风险预报", "swdz/zxhlhsqxyj.html": "中小河流洪水风险",
+  "bulletin/swpc.html": "强对流天气预报", "environment/forestfire-doc.html": "森林火险预报",
 };
 
 export function SourceStatus({ statuses }: { statuses: SourceStatusItem[] }) {
