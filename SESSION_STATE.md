@@ -1,5 +1,12 @@
 # SESSION_STATE
 
+## 自动回归配置（2026-10-16）
+
+- 新增 `.github/workflows/ci.yml`：相关变更 PR、main 推送和手动触发，分别运行 Python 3.12/uv 锁定安装与离线 pytest，以及 Node.js 22/npm ci 与 TypeScript/Vite 构建。本节更新此前“没有配置 CI”的历史状态；合并及远端执行状态以 GitHub 为准。
+- 新增测试级网络保护和 7 项保护检查；现有 51 项回归加新增检查，共 58 项本地通过，使用保存页面、采集替身和临时 SQLite。未接入真实站点、生产数据库或私密变量，未启动 Docker 或执行真实端到端验收。
+- 本地 `uv sync --frozen --group dev`、`uv lock --check --offline`、`npm ci --no-audit --no-fund`、TypeScript/Vite 构建通过；Node 22.23.3 下复核构建通过。测试保留既有 Starlette/AnyIO 弃用提示，构建保留既有图表块大于 500 kB 提示。
+- GitHub runner 的 action 下载、网络依赖安装、缓存及事件触发仍需首次 Actions 实际运行确认；本地结果不代表远端已通过。
+
 ## 当前阶段（2026-09-30）
 
 CMA 公开消息已接入看板；结构、依赖、部署和响应式 UI 已完善，并完成本机真实容器验收。

@@ -1,5 +1,12 @@
 # DECISIONS
 
+## 2026-10-16
+
+### D-025: 最小化 GitHub Actions 离线回归
+- 使用两个独立作业：Python 3.12/uv 0.11.0 锁定安装及 pytest；Node.js 22/npm ci 及 TypeScript/Vite 构建。不增加服务、矩阵或依赖，不更改业务实现和锁文件。
+- 在相关变更的 PR、main 推送和手动触发时运行；文档变更不自动运行行为测试。工作流仅有 contents 读权限，固定 action 提交，不使用生产配置和 secrets。
+- pytest 自动禁止 DNS 及 IPv4/IPv6 外连，以现有替身、保存页面和临时 SQLite 验证；CI 全局数据库为内存 SQLite。真实网站和容器验收留在原有单独流程。
+
 ## 2026-02-12
 
 ### D-001: V1 单体分层架构（非微服务）
