@@ -1,0 +1,72 @@
+name: Regression checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/ci.yml"
+      - "backend/**"
+      - "worker/**"
+      - "frontend/**"
+      - "pyproject.toml"
+      - "uv.lock"
+  pull_request:
+    paths:
+      - ".github/workflows/ci.yml"
+      - "backend/**"
+      - "worker/**"
+      - "frontend/**"
+      - "pyproject.toml"
+      - "uv.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Python offline tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: "sqlite:///:memory:"
+      AI_PROVIDER: none
+      OPENAI_API_KEY: ""
+      QWEATHER_API_KEY: ""
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.11.0"
+          python-version: "3.12"
+      - name: Install locked Python dependencies
+        run: uv sync --frozen --group dev
+      - name: Run offline backend regression tests
+        run: uv run --offline --no-sync pytest backend/tests -q --tb=short
+
+  frontend:
+    name: TypeScript and Vite build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked frontend dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Check TypeScript and build Vite assets
+        run: npm run build

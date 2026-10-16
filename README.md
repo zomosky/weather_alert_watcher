@@ -33,6 +33,16 @@ uv.lock                锁定依赖
 frontend/nginx.conf    静态资源与同源 API 代理
 ```
 
+## 自动回归校验
+
+`.github/workflows/ci.yml` 在相关代码、依赖锁文件或工作流变更的 PR、`main` 推送时运行，也可手动触发。仅修改文档不触发回归；如将来设为分支保护必需检查，应同时调整路径过滤，避免被跳过的检查一直等待。
+
+- 后端：Python 3.12、uv 0.11.0（与 Dockerfile 一致），先 `uv sync --frozen --group dev`，再 `uv run --offline --no-sync pytest backend/tests -q --tb=short`。
+- 前端：Node.js 22，执行 `npm ci --no-audit --no-fund` 和 `npm run build`（包含 TypeScript 检查）。
+- 安装依赖需要联网，pytest 阶段不访问真实气象网站。`backend/tests/conftest.py` 自动禁止测试中的 DNS 查询及 IPv4/IPv6 socket 外连；使用保存页面、MockTransport 和临时 SQLite，保留 TestClient 所需的 Unix socket。
+- CI 显式使用内存 SQLite，不复制 `.env`、不注入 secrets、不启动 PostgreSQL、worker 或 Docker；checkout 不保留 Git 凭据，不打印环境变量或 pytest 局部变量。离线保护失败信息不包含目标地址或凭据。
+- 这是离线回归与构建检查，真实来源时效、容器运行态和浏览器端到端验收仍按原验收流程单独执行。
+
 ## 本机开发
 
 前置条件：`uv`、Node.js 22；Docker 模式另需 Docker Desktop。
