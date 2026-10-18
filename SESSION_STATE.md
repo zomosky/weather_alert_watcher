@@ -1,5 +1,15 @@
 # SESSION_STATE
 
+## CI 合并后审查修复（2026-10-18）
+
+- 基于 main `cb6405c`，在独立分支 `fix/ci-review-followups` 修复 PR #1 的三个审查缺口；没有其他打开的 PR 重复处理本次工作。
+- CI 拆分为后端、worker、前端三个路径独立工作流。worker-only 不运行完整后端测试；后端运行代码和共享 Python 配置变更会验证 worker。
+- 离线 fixture 提升至仓库根部并补拦截 sendmsg。新增 IPv4/IPv6 回归先在旧实现中失败，Unix socket 通信保持可用。
+- 新增 7 项 worker 入口和调度回归、4 项 sendmsg/Unix IPC 回归；业务代码、依赖锁文件及部署配置保持原样。
+- 验证：独立 worker 7 项通过；共享 fixture 的完整 Python 复验 69 项通过（保留既有 Starlette/AnyIO 弃用提示）；3 个 YAML 解析及 28 组事件/路径路由检查通过。临时模拟跳过刷新、跳过首次刷新和允许任务重叠，新增测试均拒绝这些回归；业务文件已恢复并确认无差异。
+- 本地新 worktree 的 `uv sync --offline --frozen --group dev` 因 uvloop wheel 不在缓存而未完成，随后使用此前已安装的项目环境运行 `uv run --offline --no-sync pytest`；远端干净锁定安装由 PR Checks 核验。工件位于未提交的 `artifacts/ci-review/`，包括 JUnit 和路由/回归敏感性报告。
+- 前端源码未变，本地未重复构建；修改后的前端工作流将在 PR 中验证。未重建或部署服务，未运行真实来源或浏览器端到端验收；GitHub 执行状态以 PR Checks 为准。
+
 ## 自动回归配置（2026-10-16）
 
 - 新增 `.github/workflows/ci.yml`：相关变更 PR、main 推送和手动触发，分别运行 Python 3.12/uv 锁定安装与离线 pytest，以及 Node.js 22/npm ci 与 TypeScript/Vite 构建。本节更新此前“没有配置 CI”的历史状态；合并及远端执行状态以 GitHub 为准。

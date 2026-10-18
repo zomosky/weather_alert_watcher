@@ -1,5 +1,13 @@
 # DECISIONS
 
+## 2026-10-18
+
+### D-026: 按组件触发 CI，并直接验证 worker
+- 修复 PR #1 的三项合并后审查问题，保留现有工具版本、锁文件及最小权限，不重建部署流程。
+- 后端、worker、前端各自使用路径过滤工作流：worker-only 只跑 worker；backend/app 作为共享运行依赖同时验证后端与 worker；Python 依赖与根 fixture 同时验证两套 Python 测试。各工作流修改触发自身检查。
+- 将离线 fixture 提升到仓库根部供两套测试共用，补拦截可选 socket.sendmsg，保留 Unix IPC；不把 Python monkeypatch 表述为操作系统网络沙箱。
+- worker 回归使用真实内存 SQLite 和真实任务注册，仅用显式 mock provider 与替换阻塞事件循环隔离外部系统；业务实现不变。
+
 ## 2026-10-16
 
 ### D-025: 最小化 GitHub Actions 离线回归

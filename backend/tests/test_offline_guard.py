@@ -18,3 +18,28 @@ def test_network_io_is_blocked(family, method):
 def test_dns_is_blocked():
     with pytest.raises(pytest.fail.Exception, match="Network access is disabled"):
         socket.getaddrinfo("offline.invalid", 443)
+
+
+@pytest.mark.skipif(not hasattr(socket.socket, "sendmsg"), reason="sendmsg is not available")
+@pytest.mark.parametrize("family", [socket.AF_INET, socket.AF_INET6])
+def test_destination_bearing_sendmsg_is_blocked(family):
+    # 回归失败时仅可能发送到本机，不接触外部网络。
+    address = ("127.0.0.1", 9) if family == socket.AF_INET else ("::1", 9)
+    with socket.socket(family, socket.SOCK_DGRAM) as client:
+        with pytest.raises(pytest.fail.Exception, match="Network access is disabled"):
+            client.sendmsg([b"test"], [], 0, address)
+
+
+def test_unix_socket_ipc_remains_available():
+    sender, receiver = socket.socketpair()
+    with sender, receiver:
+        sender.sendall(b"test")
+        assert receiver.recv(4) == b"test"
+
+
+@pytest.mark.skipif(not hasattr(socket.socket, "sendmsg"), reason="sendmsg is not available")
+def test_unix_sendmsg_remains_available():
+    sender, receiver = socket.socketpair()
+    with sender, receiver:
+        assert sender.sendmsg([b"test"]) == 4
+        assert receiver.recv(4) == b"test"
