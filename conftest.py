@@ -1,4 +1,4 @@
-"""Keep backend regression tests offline; use transports/fixtures for providers."""
+"""Keep Python regression tests offline; use transports/fixtures for providers."""
 import socket
 
 import pytest
@@ -12,15 +12,16 @@ def disable_network(monkeypatch):
 
         def guarded(client, *args, **kwargs):
             if client.family in (socket.AF_INET, socket.AF_INET6):
-                pytest.fail("Network access is disabled in backend tests", pytrace=False)
+                pytest.fail("Network access is disabled in Python tests", pytrace=False)
             return original(client, *args, **kwargs)
 
         monkeypatch.setattr(socket.socket, name, guarded)
 
-    for name in ("connect", "connect_ex", "sendto"):
-        block_method(name)
+    for name in ("connect", "connect_ex", "sendto", "sendmsg"):
+        if hasattr(socket.socket, name):
+            block_method(name)
 
     def block_dns(*args, **kwargs):
-        pytest.fail("Network access is disabled in backend tests", pytrace=False)
+        pytest.fail("Network access is disabled in Python tests", pytrace=False)
 
     monkeypatch.setattr(socket, "getaddrinfo", block_dns)

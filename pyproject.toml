@@ -17,5 +17,5 @@ dev = ["pytest==8.3.4"]
 package = false
 
 [tool.pytest.ini_options]
-testpaths = ["backend/tests"]
-pythonpath = ["backend"]
+testpaths = ["backend/tests", "worker/tests"]
+pythonpath = ["backend", "."]
